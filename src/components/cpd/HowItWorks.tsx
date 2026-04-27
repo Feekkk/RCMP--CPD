@@ -1,21 +1,21 @@
-import { PlusCircle, Search, TrendingUp, type LucideIcon } from "lucide-react";
+import { Landmark, ShieldCheck, RefreshCw, type LucideIcon } from "lucide-react";
 import { Reveal } from "./Reveal";
 
-const steps: { icon: LucideIcon; title: string; desc: string }[] = [
+const features: { icon: LucideIcon; title: string; desc: string }[] = [
   {
-    icon: Search,
-    title: "Discover Opportunities",
-    desc: "Find workshops, conferences, and training tailored to your academic discipline and career goals.",
+    icon: RefreshCw,
+    title: "Simple tracking",
+    desc: "Log CPD activities quickly with evidence so your record is always current.",
   },
   {
-    icon: PlusCircle,
-    title: "Log Your Activities",
-    desc: "Easily record your pedagogical, research, and community service hours with supporting evidence.",
+    icon: Landmark,
+    title: "Organized categories",
+    desc: "Keep activities grouped by approved areas for clearer reporting and audits.",
   },
   {
-    icon: TrendingUp,
-    title: "Track Your Progress",
-    desc: "Monitor your progress toward the annual 40-hour requirement with real-time dashboards.",
+    icon: ShieldCheck,
+    title: "Confident compliance",
+    desc: "Stay aligned with requirements using a structured workflow and clear progress checks.",
   },
 ];
 
@@ -23,30 +23,35 @@ export const HowItWorks = () => {
   return (
     <section className="bg-background py-24 sm:py-32">
       <div className="container mx-auto">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            How it works
-          </p>
-          <h2 className="mt-3 font-display text-3xl font-bold text-foreground sm:text-4xl">
-            Three steps to stay on track
-          </h2>
-          <p className="mt-4 text-muted-foreground">
-            A streamlined workflow designed around how academic staff actually develop their practice.
-          </p>
-        </Reveal>
+        <div className="grid items-end gap-6 md:grid-cols-2 md:gap-10">
+          <Reveal className="max-w-xl">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">
+              CPD workflow
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-foreground sm:text-4xl">
+              Experience that grows
+              <br />
+              with your scale.
+            </h2>
+          </Reveal>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {steps.map((s, i) => (
-            <Reveal key={s.title} delay={i * 120}>
-              <div className="group relative h-full rounded-2xl border border-secondary bg-card p-8 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-primary hover:shadow-elegant">
-                <div className="absolute -top-3 left-8 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
-                  Step {i + 1}
+          <Reveal className="md:justify-self-end">
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Design a simple operating system for CPD that supports planning, evidence collection,
+              and clear progress visibility - without breaking your existing routine.
+            </p>
+          </Reveal>
+        </div>
+
+        <div className="mt-14 grid gap-10 md:mt-16 md:grid-cols-3 md:gap-8">
+          {features.map((f, i) => (
+            <Reveal key={f.title} delay={i * 120}>
+              <div className="h-full">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <f.icon className="h-5 w-5" />
                 </div>
-                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-secondary/50 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                  <s.icon className="h-6 w-6" strokeWidth={2.2} />
-                </div>
-                <h3 className="font-display text-xl font-bold text-primary">{s.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{s.desc}</p>
+                <h3 className="mt-5 text-base font-semibold text-foreground">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.desc}</p>
               </div>
             </Reveal>
           ))}

@@ -5,10 +5,16 @@ export const Navbar = () => {
   return (
     <header className="absolute top-0 left-0 right-0 z-50">
       <nav className="container mx-auto flex items-center justify-between py-5">
-        <a href="#" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-card">
-            <GraduationCap className="h-5 w-5" />
-          </div>
+        <a href="https://rcmp.unikl.edu.my" className="flex items-center gap-3">
+          <img
+            src="/rcmp-real.png"
+            alt="UniKL RCMP logo"
+            width={280}
+            height={280}
+            className="h-28 w-28 object-contain"
+            loading="eager"
+            decoding="async"
+          />
           <div className="leading-tight">
             <p className="font-display text-base font-bold text-foreground">UniKL RCMP</p>
             <p className="text-xs font-medium text-muted-foreground">CPD Portal</p>

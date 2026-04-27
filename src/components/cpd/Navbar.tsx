@@ -1,4 +1,5 @@
 import { GraduationCap, HelpCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 export const Navbar = () => {
@@ -29,8 +30,8 @@ export const Navbar = () => {
             <HelpCircle className="h-4 w-4" />
             Help / FAQ
           </a>
-          <Button size="lg" className="shadow-card">
-            Staff Login
+          <Button size="lg" className="shadow-card" asChild>
+            <Link to="/login">Staff Login</Link>
           </Button>
         </div>
       </nav>

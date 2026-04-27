@@ -39,12 +39,8 @@ export const Categories = () => {
           {categories.map((c, i) => (
             <Reveal key={c.title} delay={(i % 3) * 100}>
               <div className="group flex h-full items-start gap-5 rounded-2xl border border-secondary bg-card p-6 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-primary hover:shadow-elegant">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary/60 transition-colors group-hover:bg-primary">
-                  <c.icon
-                    className="h-6 w-6 text-secondary-foreground/70 transition-colors group-hover:text-primary-foreground"
-                    style={{ color: "hsl(var(--secondary))" }}
-                    strokeWidth={2.2}
-                  />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/5 transition-colors group-hover:bg-primary/10">
+                  <c.icon className="h-6 w-6 text-secondary" strokeWidth={2.4} />
                 </div>
                 <div>
                   <h3 className="font-display text-lg font-bold text-primary">{c.title}</h3>

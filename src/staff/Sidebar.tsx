@@ -18,7 +18,7 @@ export function StaffSidebar() {
     <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 border-r bg-background md:block">
       <div className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b px-6 py-5">
-            <img src="/rcmp.png" alt="logo" width={40} height={40} className="h-10 w-10 object-contain" />
+            <img src="/unikl-rcmp.png" alt="logo" width={40} height={40} className="h-18 w-20 object-contain" />
           <div className="leading-tight">
             <p className="font-display text-sm font-bold text-foreground">CPD Portal</p>
             <p className="text-xs font-medium text-muted-foreground">Staff</p>

@@ -15,6 +15,11 @@ import { AdminReportPage } from "./admin/Report.tsx";
 import { AdminRequisitionsPage } from "./admin/Requisitions.tsx";
 import { AdminSettingsPage } from "./admin/Settings.tsx";
 import { AdminUsersPage } from "./admin/Users.tsx";
+import { HODDashboardPage } from "./HOD/Dashboard.tsx";
+import { HODHistoryPage } from "./HOD/History.tsx";
+import { HODRequisitionsPage } from "./HOD/Requisitions.tsx";
+import { HODReviewQueuePage } from "./HOD/ReviewQueue.tsx";
+import { HODSettingsPage } from "./HOD/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -43,6 +48,13 @@ const App = () => (
           <Route path="/admin/history" element={<AdminHistoryPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
+
+          {/* HOD Routes */}
+          <Route path="/hod/dashboard" element={<HODDashboardPage />} />
+          <Route path="/hod/requisitions" element={<HODRequisitionsPage />} />
+          <Route path="/hod/review-queue" element={<HODReviewQueuePage />} />
+          <Route path="/hod/history" element={<HODHistoryPage />} />
+          <Route path="/hod/settings" element={<HODSettingsPage />} />
 
           {/* Pages */}
           <Route path="/login" element={<Login />} />

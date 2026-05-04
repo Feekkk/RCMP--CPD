@@ -9,12 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
+type LoginSuccess = {
+  staffId: number;
+  fullName: string;
+  roleId: number;
+  roleName: string;
+  redirect: string;
+};
+
 const Login = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = React.useState(false);
   const [staffId, setStaffId] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -45,21 +54,37 @@ const Login = () => {
 
               <form
                 className="grid gap-4"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   setError(null);
+                  setSubmitting(true);
 
                   const id = staffId.trim();
-                  const isStaff = id === "620000" && password === "RCMP1234";
-                  const isAdmin = id === "620001" && password === "RCMP1234";
-                  const isHOD = id === "620002" && password === "RCMP1234";
+                  try {
+                    const res = await fetch("/api/login", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ staffId: id, password }),
+                    });
 
-                  if (!isStaff && !isAdmin && !isHOD) {
-                    setError("Invalid Staff ID or password.");
-                    return;
+                    const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
+
+                    if (!res.ok) {
+                      setError(typeof data.error === "string" ? data.error : "Invalid Staff ID or password.");
+                      return;
+                    }
+
+                    if (!data.redirect || typeof data.redirect !== "string") {
+                      setError("Unexpected server response.");
+                      return;
+                    }
+
+                    navigate(data.redirect);
+                  } catch {
+                    setError("Cannot reach the server. Start the API (npm run server) or run npm run dev:full.");
+                  } finally {
+                    setSubmitting(false);
                   }
-
-                  navigate(isAdmin ? "/admin/dashboard" : isHOD ? "/hod/dashboard" : "/staff/dashboard");
                 }}
               >
                 <div className="grid gap-2">
@@ -110,8 +135,8 @@ const Login = () => {
                   </Button>
                 </div>
 
-                <Button type="submit" className="w-full">
-                  Login
+                <Button type="submit" className="w-full" disabled={submitting}>
+                  {submitting ? "Signing in…" : "Login"}
                 </Button>
 
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}

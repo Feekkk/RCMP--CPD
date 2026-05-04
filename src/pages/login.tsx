@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 const Login = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = React.useState(false);
+  const [staffId, setStaffId] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -20,9 +24,12 @@ const Login = () => {
             <Button variant="ghost" asChild className="-ml-2 w-fit px-2 text-muted-foreground hover:text-foreground">
               <Link to="/">
                 <ArrowLeft className="h-4 w-4" />
-                Back to homepage
+                back
               </Link>
             </Button>
+            <div className="flex justify-center pb-2">
+              <img src="/rcmp-real.png" alt="UniKL RCMP logo" className="h-20 w-auto object-contain" />
+            </div>
             <CardTitle className="font-display text-3xl">Staff Login</CardTitle>
             <CardDescription>Welcome back !</CardDescription>
           </CardHeader>
@@ -40,11 +47,32 @@ const Login = () => {
                 className="grid gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  setError(null);
+
+                  const id = staffId.trim();
+                  const isStaff = id === "620000" && password === "RCMP1234";
+                  const isAdmin = id === "620001" && password === "RCMP1234";
+                  const isHOD = id === "620002" && password === "RCMP1234";
+
+                  if (!isStaff && !isAdmin && !isHOD) {
+                    setError("Invalid Staff ID or password.");
+                    return;
+                  }
+
+                  navigate(isAdmin ? "/admin/dashboard" : isHOD ? "/hod/dashboard" : "/staff/dashboard");
                 }}
               >
                 <div className="grid gap-2">
                   <Label htmlFor="number">Staff ID</Label>
-                  <Input id="number" type="text" placeholder="Enter your staff ID" autoComplete="staff-id" />
+                  <Input
+                    id="number"
+                    type="text"
+                    placeholder="Enter your staff ID"
+                    autoComplete="username"
+                    inputMode="numeric"
+                    value={staffId}
+                    onChange={(e) => setStaffId(e.target.value)}
+                  />
                 </div>
 
                 <div className="grid gap-2">
@@ -58,6 +86,8 @@ const Login = () => {
                       placeholder="Enter your password"
                       autoComplete="current-password"
                       className="pr-10"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                     <button
                       type="button"
@@ -83,6 +113,8 @@ const Login = () => {
                 <Button type="submit" className="w-full">
                   Login
                 </Button>
+
+                {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
 
                 <p className="text-center text-sm text-muted-foreground">
                   Cannot access the system?{" "}

@@ -3,6 +3,7 @@ import express from "express";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 
@@ -17,10 +18,10 @@ app.use(
         imgSrc: ["'self'", "data:", "https:"],
       },
     },
-    frameguard: { action: "deny" }, // Prevent clickjacking
+    frameguard: { action: "deny" }, //  Clickjacking
     hsts: { maxAge: 31536000, includeSubDomains: true }, // Enforce HTTPS
     referrerPolicy: { policy: "strict-origin-when-cross-origin" }, // Control referrer info
-    permissionsPolicy: {
+    permissionsPolicy: {    // Control access to features
       features: {
         camera: ["()"],
         microphone: ["()"],
@@ -29,6 +30,24 @@ app.use(
     },
   })
 );
+
+// Rate Limiting Configuration
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Strict limit: 5 login attempts per 15 minutes
+  message: "Too many login attempts, please try again after 15 minutes.",
+  skipSuccessfulRequests: true, // Don't count successful requests
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "127.0.0.1",
@@ -57,7 +76,7 @@ app.get("/api/ping", (_req, res) => {
   res.json({ ok: true, service: "api", uptime: Math.floor(process.uptime()) });
 });
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", loginLimiter, async (req, res) => {
   const staffIdRaw = req.body?.staffId;
   const password = req.body?.password;
 
@@ -103,7 +122,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.get("/api/health", async (_req, res) => {
+app.get("/api/health", generalLimiter, async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     res.json({ ok: true, db: true });

@@ -7,6 +7,9 @@ import rateLimit from "express-rate-limit";
 
 const app = express();
 
+// If the app is behind a proxy (Vite dev proxy, load balancer, etc.),
+// enable trust proxy so express-rate-limit sees the real client IP.
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "20kb" }));
 app.use(
   helmet({
@@ -43,10 +46,14 @@ const generalLimiter = rateLimit({
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Strict limit: 5 login attempts per 15 minutes
-  message: "Too many login attempts, please try again after 15 minutes.",
   skipSuccessfulRequests: true, // Don't count successful requests
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res /*, next */) => {
+    const retryAfter = Math.ceil((req.rateLimit && req.rateLimit.resetTime ? (req.rateLimit.resetTime - Date.now()) / 1000 : 15 * 60));
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({ error: `Too many login attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).` });
+  },
 });
 
 const pool = mysql.createPool({

@@ -70,7 +70,17 @@ const Login = () => {
                     const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
 
                     if (!res.ok) {
-                      setError(typeof data.error === "string" ? data.error : "Invalid Staff ID or password.");
+                      if (typeof data.error === "string" && data.error.trim()) {
+                        setError(data.error);
+                        return;
+                      }
+
+                      if (res.status >= 500) {
+                        setError("Service temporarily unavailable. Please try again in a moment.");
+                        return;
+                      }
+
+                      setError("Invalid Staff ID or password.");
                       return;
                     }
 

@@ -1,13 +1,11 @@
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 
 const app = express();
 const port = Number(process.env.API_PORT || 3001);
 
-app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "20kb" }));
 
 const pool = mysql.createPool({
@@ -87,8 +85,4 @@ app.get("/api/health", async (_req, res) => {
     console.error("Health check:", err);
     res.status(503).json({ ok: false, db: false });
   }
-});
-
-app.listen(port, "127.0.0.1", () => {
-  console.log(`CPD API listening on http://127.0.0.1:${port}`);
 });

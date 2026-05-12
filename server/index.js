@@ -2,10 +2,33 @@ import "dotenv/config";
 import express from "express";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
+import helmet from "helmet";
 
 const app = express();
 
 app.use(express.json({ limit: "20kb" }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    frameguard: { action: "deny" }, // Prevent clickjacking
+    hsts: { maxAge: 31536000, includeSubDomains: true }, // Enforce HTTPS
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" }, // Control referrer info
+    permissionsPolicy: {
+      features: {
+        camera: ["()"],
+        microphone: ["()"],
+        geolocation: ["()"],
+      },
+    },
+  })
+);
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "127.0.0.1",

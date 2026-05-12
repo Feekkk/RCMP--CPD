@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "node server/index.js",
     "server": "node server/index.js",
     "dev:full": "concurrently -n web,api -c blue,magenta \"npm run dev\" \"npm run server\"",
     "build": "vite build",

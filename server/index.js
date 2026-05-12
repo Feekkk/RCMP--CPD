@@ -4,7 +4,6 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 
 const app = express();
-const port = Number(process.env.API_PORT || 3001);
 
 app.use(express.json({ limit: "20kb" }));
 
@@ -89,8 +88,4 @@ app.get("/api/health", async (_req, res) => {
     console.error("Health check:", err);
     res.status(503).json({ ok: false, db: false });
   }
-});
-
-app.listen(port, () => {
-  console.log(`API server listening on port ${port}`);
 });

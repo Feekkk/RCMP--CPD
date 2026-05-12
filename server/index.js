@@ -31,6 +31,10 @@ function dashboardPathForRole(roleId) {
   }
 }
 
+app.get("/api/ping", (_req, res) => {
+  res.json({ ok: true, service: "api", uptime: Math.floor(process.uptime()) });
+});
+
 app.post("/api/login", async (req, res) => {
   const staffIdRaw = req.body?.staffId;
   const password = req.body?.password;
@@ -39,7 +43,7 @@ app.post("/api/login", async (req, res) => {
     return res.status(400).json({ error: "Staff ID and password are required." });
   }
 
-  const staffId = Number.parseInt(String(staffIdRaw).trim(), 10);
+  const staffId = parseInt(String(staffIdRaw).trim(), 10);
   if (!Number.isFinite(staffId) || staffId <= 0) {
     return res.status(400).json({ error: "Invalid Staff ID." });
   }
@@ -85,4 +89,8 @@ app.get("/api/health", async (_req, res) => {
     console.error("Health check:", err);
     res.status(503).json({ ok: false, db: false });
   }
+});
+
+app.listen(port, () => {
+  console.log(`API server listening on port ${port}`);
 });

@@ -24,6 +24,8 @@ const Login = () => {
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [rateLimitRemaining, setRateLimitRemaining] = React.useState<number | null>(null);
+  const [rateLimitReset, setRateLimitReset] = React.useState<number | null>(null);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -67,9 +69,28 @@ const Login = () => {
                       body: JSON.stringify({ staffId: id, password }),
                     });
 
+                    // Parse rate limit headers
+                    const remaining = res.headers.get("ratelimit-remaining");
+                    const resetTime = res.headers.get("ratelimit-reset");
+                    
+                    if (remaining !== null) {
+                      setRateLimitRemaining(parseInt(remaining, 10));
+                    }
+                    if (resetTime !== null) {
+                      setRateLimitReset(parseInt(resetTime, 10) * 1000);
+                    }
+
                     const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
 
                     if (!res.ok) {
+                      // Handle rate limiting (429 status)
+                      if (res.status === 429) {
+                        const resetMs = resetTime ? parseInt(resetTime, 10) * 1000 : null;
+                        const minutesLeft = resetMs ? Math.ceil((resetMs - Date.now()) / 60000) : 15;
+                        setError(`Too many login attempts. Please try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.`);
+                        return;
+                      }
+
                       if (typeof data.error === "string" && data.error.trim()) {
                         setError(data.error);
                         return;
@@ -145,11 +166,21 @@ const Login = () => {
                   </Button>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={submitting || (rateLimitRemaining !== null && rateLimitRemaining <= 0)}
+                >
                   {submitting ? "Signing in…" : "Login"}
                 </Button>
 
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
+                
+                {rateLimitRemaining !== null && rateLimitRemaining > 0 && (
+                  <p className="text-sm text-muted-foreground text-center">
+                    Attempts remaining: <span className="font-semibold">{rateLimitRemaining}</span>/5
+                  </p>
+                )}
 
                 <p className="text-center text-sm text-muted-foreground">
                   Cannot access the system?{" "}

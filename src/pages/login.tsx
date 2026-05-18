@@ -83,7 +83,11 @@ const Login = () => {
                     const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
 
                     if (!res.ok) {
-                      // Handle rate limiting (429 status)
+                      if (typeof data.error === "string" && data.error.trim()) {
+                        setError(data.error);
+                        return;
+                      }
+
                       if (res.status === 429) {
                         const resetMs = resetTime ? parseInt(resetTime, 10) * 1000 : null;
                         const minutesLeft = resetMs ? Math.ceil((resetMs - Date.now()) / 60000) : 15;
@@ -91,13 +95,10 @@ const Login = () => {
                         return;
                       }
 
-                      if (typeof data.error === "string" && data.error.trim()) {
-                        setError(data.error);
-                        return;
-                      }
-
                       if (res.status >= 500) {
-                        setError("Service temporarily unavailable. Please try again in a moment.");
+                        setError(
+                          `Login service error (HTTP ${res.status}). Open /api/health in the browser — if it fails, check the Node app and database on the server.`,
+                        );
                         return;
                       }
 
@@ -112,7 +113,9 @@ const Login = () => {
 
                     navigate(data.redirect);
                   } catch {
-                    setError("Cannot reach the server. Start the API (npm run server) or run npm run dev:full.");
+                    setError(
+                      "Cannot reach the login API. Ensure the Node app is running and /api requests are proxied to it (e.g. npm start on server).",
+                    );
                   } finally {
                     setSubmitting(false);
                   }

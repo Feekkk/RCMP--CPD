@@ -17,6 +17,17 @@ type LoginSuccess = {
   redirect: string;
 };
 
+function MicrosoftLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 21 21" aria-hidden>
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
 const Login = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = React.useState(false);
@@ -175,6 +186,26 @@ const Login = () => {
                   disabled={submitting || (rateLimitRemaining !== null && rateLimitRemaining <= 0)}
                 >
                   {submitting ? "Signing in…" : "Login"}
+                </Button>
+
+                <div className="relative py-1">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                    or
+                  </span>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2"
+                  disabled
+                  title="Coming soon"
+                  aria-label="Login with Microsoft SSO — coming soon"
+                >
+                  <MicrosoftLogo className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 text-center">Microsoft SSO</span>
+                  <span className="text-xs font-medium text-muted-foreground">Coming soon</span>
                 </Button>
 
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}

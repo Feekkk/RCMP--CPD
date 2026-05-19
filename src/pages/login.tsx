@@ -52,8 +52,6 @@ const Login = () => {
             <div className="flex justify-center pb-2">
               <img src="/rcmp-real.png" alt="UniKL RCMP logo" className="h-20 w-auto object-contain" />
             </div>
-            <CardTitle className="font-display text-3xl">Staff Login</CardTitle>
-            <CardDescription>Welcome back !</CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -168,16 +166,6 @@ const Login = () => {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox />
-                    Remember me
-                  </label>
-                  <Button variant="link" asChild className="h-auto p-0 text-sm">
-                    <Link to="#">Forgot password?</Link>
-                  </Button>
                 </div>
 
                 <Button 

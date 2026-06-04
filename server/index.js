@@ -68,6 +68,8 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
+const HOD_ROLE_ID = 3;
+
 function dashboardPathForRole(roleId) {
   switch (roleId) {
     case 1:
@@ -159,6 +161,70 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
+    const mapped = mapLoginDbError(err);
+    return res.status(mapped.status).json({ error: mapped.error });
+  }
+});
+
+app.get("/api/admin/users-by-department", generalLimiter, async (_req, res) => {
+  try {
+    const [deptRows] = await pool.execute(
+      `SELECT department_id, department_name
+       FROM department_table
+       ORDER BY department_name`,
+    );
+
+    const [staffRows] = await pool.execute(
+      `SELECT s.staff_id, s.full_name, s.email_address, s.department_id, s.role_id, r.role_name
+       FROM staff s
+       INNER JOIN role_table r ON r.role_id = s.role_id
+       ORDER BY s.full_name`,
+    );
+
+    const staffByDept = new Map();
+    for (const row of staffRows) {
+      const deptId = row.department_id;
+      if (!staffByDept.has(deptId)) staffByDept.set(deptId, []);
+      staffByDept.get(deptId).push({
+        staffId: row.staff_id,
+        fullName: row.full_name,
+        email: row.email_address,
+        roleId: row.role_id,
+        roleName: row.role_name,
+      });
+    }
+
+    const departments = deptRows.map((d) => {
+      const staff = staffByDept.get(d.department_id) ?? [];
+      const hods = staff.filter((s) => s.roleId === HOD_ROLE_ID);
+      return {
+        departmentId: d.department_id,
+        departmentName: d.department_name,
+        staffCount: staff.length,
+        hasHod: hods.length > 0,
+        hods: hods.map(({ staffId, fullName, email }) => ({ staffId, fullName, email })),
+        staff,
+      };
+    });
+
+    const departmentsWithoutHod = departments
+      .filter((d) => !d.hasHod)
+      .map((d) => ({
+        departmentId: d.departmentId,
+        departmentName: d.departmentName,
+      }));
+
+    return res.json({
+      departments,
+      departmentsWithoutHod,
+      summary: {
+        totalDepartments: departments.length,
+        totalStaff: staffRows.length,
+        departmentsWithoutHodCount: departmentsWithoutHod.length,
+      },
+    });
+  } catch (err) {
+    console.error("Admin users-by-department error:", err);
     const mapped = mapLoginDbError(err);
     return res.status(mapped.status).json({ error: mapped.error });
   }

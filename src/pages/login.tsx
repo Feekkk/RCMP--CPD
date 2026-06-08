@@ -36,7 +36,6 @@ const Login = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [ssoLoading, setSsoLoading] = React.useState(false);
-  const [microsoftSsoEnabled, setMicrosoftSsoEnabled] = React.useState(false);
   const [rateLimitRemaining, setRateLimitRemaining] = React.useState<number | null>(null);
 
   React.useEffect(() => {
@@ -49,13 +48,6 @@ const Login = () => {
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
-
-  React.useEffect(() => {
-    fetch("/api/auth/microsoft/status")
-      .then((res) => res.json())
-      .then((data: { enabled?: boolean }) => setMicrosoftSsoEnabled(Boolean(data.enabled)))
-      .catch(() => setMicrosoftSsoEnabled(false));
-  }, []);
 
   const startMicrosoftLogin = () => {
     setError(null);
@@ -202,12 +194,8 @@ const Login = () => {
                   type="button"
                   variant="outline"
                   className="w-full gap-2"
-                  disabled={!microsoftSsoEnabled || ssoLoading}
-                  title={
-                    microsoftSsoEnabled
-                      ? "Sign in with your UniKL Microsoft account"
-                      : "Microsoft SSO is not configured on the server yet"
-                  }
+                  disabled={ssoLoading}
+                  title="Sign in with your UniKL Microsoft account"
                   onClick={startMicrosoftLogin}
                 >
                   {ssoLoading ? (
@@ -217,12 +205,6 @@ const Login = () => {
                   )}
                   <span className="flex-1 text-center">Microsoft SSO</span>
                 </Button>
-
-                {!microsoftSsoEnabled ? (
-                  <p className="text-center text-xs text-muted-foreground">
-                    SSO unavailable until Azure credentials are set in the server <code className="text-xs">.env</code>.
-                  </p>
-                ) : null}
 
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
 

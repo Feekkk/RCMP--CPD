@@ -17,6 +17,32 @@ export function isMicrosoftSsoConfigured() {
   );
 }
 
+function getRedirectUri() {
+  return trimEnv(process.env.AZURE_REDIRECT_URI);
+}
+
+function buildMicrosoftAuthorizeUrl({ tenantId, clientId, redirectUri, state, codeChallenge }) {
+  if (!redirectUri) {
+    throw new Error("AZURE_REDIRECT_URI is not set.");
+  }
+
+  const url = new URL(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_mode", "query");
+  url.searchParams.set("scope", "openid profile email offline_access");
+  url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  return url;
+}
+
+function callbackUrlFromRequest(req, redirectUri) {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  return new URL(`${redirectUri}${query}`);
+}
+
 function appOrigin(req) {
   const configured = trimEnv(process.env.APP_URL);
   if (configured) return configured.replace(/\/$/, "");
@@ -125,8 +151,16 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
 
   apiRouter.get("/auth/microsoft", loginLimiter, async (req, res) => {
     try {
-      const config = await getOidcConfig();
-      const redirectUri = trimEnv(process.env.AZURE_REDIRECT_URI);
+      const redirectUri = getRedirectUri();
+      const tenantId = trimEnv(process.env.AZURE_TENANT_ID);
+      const clientId = trimEnv(process.env.AZURE_CLIENT_ID);
+
+      if (!redirectUri || !tenantId || !clientId) {
+        return res.redirect(
+          loginRedirect(req, "config", "Microsoft SSO is misconfigured. Check AZURE_* values in .env and restart the API."),
+        );
+      }
+
       const codeVerifier = client.randomPKCECodeVerifier();
       const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
       const state = crypto.randomBytes(16).toString("hex");
@@ -134,12 +168,12 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
       req.session.oauthState = state;
       req.session.oauthCodeVerifier = codeVerifier;
 
-      const authUrl = client.buildAuthorizationUrl(config, {
-        redirect_uri: redirectUri,
-        scope: "openid profile email offline_access",
-        code_challenge: codeChallenge,
-        code_challenge_method: "S256",
+      const authUrl = buildMicrosoftAuthorizeUrl({
+        tenantId,
+        clientId,
+        redirectUri,
         state,
+        codeChallenge,
       });
 
       req.session.save((saveErr) => {
@@ -171,8 +205,14 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
       }
 
       const config = await getOidcConfig();
-      const redirectUri = trimEnv(process.env.AZURE_REDIRECT_URI);
-      const callbackUrl = new URL(`${req.protocol}://${req.get("host")}${req.originalUrl}`);
+      const redirectUri = getRedirectUri();
+      if (!redirectUri) {
+        return res.redirect(
+          loginRedirect(req, "config", "Microsoft SSO redirect URI is missing. Set AZURE_REDIRECT_URI in .env."),
+        );
+      }
+
+      const callbackUrl = callbackUrlFromRequest(req, redirectUri);
 
       const tokens = await client.authorizationCodeGrant(config, callbackUrl, {
         pkceCodeVerifier: codeVerifier,

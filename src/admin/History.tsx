@@ -103,13 +103,13 @@ export function AdminHistoryPage() {
               </Tabs>
 
               <div className="rounded-lg border">
-                <Table>
+                <Table>d
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[120px]">ID</TableHead>
                       <TableHead>Programme</TableHead>
                       <TableHead className="hidden md:table-cell">Staff</TableHead>
-                      <TableHead className="hidden md:table-cell">Submitted</TableHead>
+                      <TableHead className="hidden m:table-cell">Submitted</TableHead>
                       <TableHead className="text-right">Status</TableHead>
                       <TableHead className="w-[100px] text-right">Action</TableHead>
                     </TableRow>

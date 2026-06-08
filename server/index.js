@@ -7,16 +7,21 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { createSessionMiddleware } from "./auth/session.js";
+import { isMicrosoftSsoConfigured, registerMicrosoftAuthRoutes } from "./auth/microsoft.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distPath = path.join(__dirname, "..", "dist");
+const serveStatic = process.env.SERVE_STATIC !== "0" && fs.existsSync(distPath);
 
 const app = express();
+const apiRouter = express.Router();
 const port = Number(process.env.PORT || process.env.API_PORT || 3001);
 const host = process.env.HOST || "0.0.0.0";
 
-// Plesk / nginx / Passenger: trust proxy for rate limiting and HTTPS
-app.set("trust proxy", process.env.TRUST_PROXY === "0" ? false : true);
+// Local dev: leave unset or TRUST_PROXY=0. Production behind nginx/Plesk: TRUST_PROXY=1
+app.set("trust proxy", process.env.TRUST_PROXY === "1");
+app.use(createSessionMiddleware());
 app.use(express.json({ limit: "20kb" }));
 
 app.use(
@@ -27,10 +32,10 @@ app.use(
   }),
 );
 
-const rateLimitValidate =
-  process.env.RATE_LIMIT_VALIDATE_XFF === "0"
-    ? { xForwardedForHeader: false }
-    : {};
+const rateLimitValidate = {
+  trustProxy: process.env.TRUST_PROXY === "1",
+  ...(process.env.RATE_LIMIT_VALIDATE_XFF === "0" ? { xForwardedForHeader: false } : {}),
+};
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -69,6 +74,8 @@ const pool = mysql.createPool({
 });
 
 const HOD_ROLE_ID = 3;
+/** Bump when API surface changes — exposed on /api/ping for deploy checks */
+const API_BUILD = 3;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -93,7 +100,12 @@ function mapLoginDbError(err) {
       error: "Database is missing the password_hash column. Run db/migration_add_password_hash.sql.",
     };
   }
-  if (code === "ER_NO_SUCH_TABLE" && (message.includes("staff") || message.includes("role_table"))) {
+  if (
+    code === "ER_NO_SUCH_TABLE" &&
+    (message.includes("staff") ||
+      message.includes("role_table") ||
+      message.includes("department_table"))
+  ) {
     return {
       status: 503,
       error: "Database tables are missing. Import db/schema.sql into the cpd database.",
@@ -109,11 +121,51 @@ function mapLoginDbError(err) {
   return { status: 500, error: "Unable to sign in. Try again later." };
 }
 
-app.get("/api/ping", (_req, res) => {
-  res.json({ ok: true, service: "api", uptime: Math.floor(process.uptime()) });
+function mapStaffDbError(err) {
+  const code = err?.code;
+  const message = String(err?.message ?? "");
+
+  if (code === "ER_DUP_ENTRY") {
+    return { status: 409, error: "Staff ID or email already exists." };
+  }
+  if (code === "ER_NO_REFERENCES_ROW_2" || code === "ER_NO_REFERENCES_ROW") {
+    return { status: 400, error: "Invalid role or department." };
+  }
+
+  const mapped = mapLoginDbError(err);
+  return { status: mapped.status, error: mapped.error };
+}
+
+function parsePositiveInt(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const n = Number.parseInt(String(value).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const DEFAULT_STAFF_PASSWORD = "RCMP1234";
+
+async function fetchRoles() {
+  const [rows] = await pool.execute(
+    `SELECT role_id, role_name FROM role_table ORDER BY role_id`,
+  );
+  return rows.map((r) => ({ roleId: r.role_id, roleName: r.role_name }));
+}
+
+apiRouter.get("/ping", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "api",
+    apiBuild: API_BUILD,
+    uptime: Math.floor(process.uptime()),
+    features: {
+      usersByDepartment: true,
+      staffCrud: true,
+      microsoftSso: isMicrosoftSsoConfigured(),
+    },
+  });
 });
 
-app.post("/api/login", loginLimiter, async (req, res) => {
+apiRouter.post("/login", loginLimiter, async (req, res) => {
   const staffIdRaw = req.body?.staffId;
   const password = req.body?.password;
 
@@ -166,7 +218,7 @@ app.post("/api/login", loginLimiter, async (req, res) => {
   }
 });
 
-app.get("/api/admin/users-by-department", generalLimiter, async (_req, res) => {
+async function handleUsersByDepartment(_req, res) {
   try {
     const [deptRows] = await pool.execute(
       `SELECT department_id, department_name
@@ -189,6 +241,7 @@ app.get("/api/admin/users-by-department", generalLimiter, async (_req, res) => {
         staffId: row.staff_id,
         fullName: row.full_name,
         email: row.email_address,
+        departmentId: row.department_id,
         roleId: row.role_id,
         roleName: row.role_name,
       });
@@ -214,7 +267,10 @@ app.get("/api/admin/users-by-department", generalLimiter, async (_req, res) => {
         departmentName: d.departmentName,
       }));
 
+    const roles = await fetchRoles();
+
     return res.json({
+      roles,
       departments,
       departmentsWithoutHod,
       summary: {
@@ -224,13 +280,143 @@ app.get("/api/admin/users-by-department", generalLimiter, async (_req, res) => {
       },
     });
   } catch (err) {
-    console.error("Admin users-by-department error:", err);
+    console.error("Users-by-department error:", err);
     const mapped = mapLoginDbError(err);
+    return res.status(mapped.status).json({ error: mapped.error });
+  }
+}
+
+apiRouter.post("/staff", generalLimiter, async (req, res) => {
+  const fullName = String(req.body?.fullName ?? "").trim();
+  const email = String(req.body?.email ?? "").trim();
+  const phoneNumber = String(req.body?.phoneNumber ?? "").trim();
+  const departmentId = parsePositiveInt(req.body?.departmentId);
+  const roleId = parsePositiveInt(req.body?.roleId);
+  const staffId = parsePositiveInt(req.body?.staffId);
+  const passwordRaw = req.body?.password;
+  const password =
+    passwordRaw == null || String(passwordRaw).trim() === ""
+      ? DEFAULT_STAFF_PASSWORD
+      : String(passwordRaw);
+
+  if (!fullName || !email || !phoneNumber) {
+    return res.status(400).json({ error: "Full name, email, and phone number are required." });
+  }
+  if (!departmentId || !roleId) {
+    return res.status(400).json({ error: "Department and role are required." });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters." });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    if (staffId) {
+      await pool.execute(
+        `INSERT INTO staff (staff_id, full_name, email_address, phone_number, department_id, role_id, password_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [staffId, fullName, email, phoneNumber, departmentId, roleId, passwordHash],
+      );
+    } else {
+      const [result] = await pool.execute(
+        `INSERT INTO staff (full_name, email_address, phone_number, department_id, role_id, password_hash)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [fullName, email, phoneNumber, departmentId, roleId, passwordHash],
+      );
+      return res.status(201).json({
+        staffId: result.insertId,
+        message: "Staff account created.",
+      });
+    }
+
+    return res.status(201).json({
+      staffId,
+      message: "Staff account created.",
+    });
+  } catch (err) {
+    console.error("Create staff error:", err);
+    const mapped = mapStaffDbError(err);
     return res.status(mapped.status).json({ error: mapped.error });
   }
 });
 
-app.get("/api/health", generalLimiter, async (_req, res) => {
+apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
+  const staffId = parsePositiveInt(req.params.staffId);
+  if (!staffId) {
+    return res.status(400).json({ error: "Invalid staff ID." });
+  }
+
+  const roleId = req.body?.roleId !== undefined ? parsePositiveInt(req.body.roleId) : undefined;
+  const departmentId =
+    req.body?.departmentId !== undefined ? parsePositiveInt(req.body.departmentId) : undefined;
+
+  if (roleId === null && req.body?.roleId !== undefined) {
+    return res.status(400).json({ error: "Invalid role." });
+  }
+  if (departmentId === null && req.body?.departmentId !== undefined) {
+    return res.status(400).json({ error: "Invalid department." });
+  }
+  if (roleId === undefined && departmentId === undefined) {
+    return res.status(400).json({ error: "Provide roleId and/or departmentId to update." });
+  }
+
+  const sets = [];
+  const params = [];
+  if (roleId !== undefined) {
+    sets.push("role_id = ?");
+    params.push(roleId);
+  }
+  if (departmentId !== undefined) {
+    sets.push("department_id = ?");
+    params.push(departmentId);
+  }
+  params.push(staffId);
+
+  try {
+    const [result] = await pool.execute(
+      `UPDATE staff SET ${sets.join(", ")} WHERE staff_id = ?`,
+      params,
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Staff member not found." });
+    }
+
+    const [rows] = await pool.execute(
+      `SELECT s.staff_id, s.full_name, s.email_address, s.phone_number, s.department_id,
+              d.department_name, s.role_id, r.role_name
+       FROM staff s
+       INNER JOIN role_table r ON r.role_id = s.role_id
+       INNER JOIN department_table d ON d.department_id = s.department_id
+       WHERE s.staff_id = ?
+       LIMIT 1`,
+      [staffId],
+    );
+
+    const row = rows[0];
+    return res.json({
+      staffId: row.staff_id,
+      fullName: row.full_name,
+      email: row.email_address,
+      phoneNumber: row.phone_number,
+      departmentId: row.department_id,
+      departmentName: row.department_name,
+      roleId: row.role_id,
+      roleName: row.role_name,
+      message: "Staff updated.",
+    });
+  } catch (err) {
+    console.error("Update staff error:", err);
+    const mapped = mapStaffDbError(err);
+    return res.status(mapped.status).json({ error: mapped.error });
+  }
+});
+
+apiRouter.get("/users-by-department", generalLimiter, handleUsersByDepartment);
+apiRouter.get("/admin/users-by-department", generalLimiter, handleUsersByDepartment);
+
+apiRouter.get("/health", generalLimiter, async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     res.json({ ok: true, db: true });
@@ -240,7 +426,22 @@ app.get("/api/health", generalLimiter, async (_req, res) => {
   }
 });
 
-if (fs.existsSync(distPath)) {
+registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
+
+apiRouter.use((req, res) => {
+  res.status(404).json({
+    error: "API route not found.",
+    method: req.method,
+    path: req.originalUrl,
+    apiBuild: API_BUILD,
+    hint:
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full and open http://localhost:8080. Verify GET /api/ping returns apiBuild 3.",
+  });
+});
+
+app.use("/api", apiRouter);
+
+if (serveStatic) {
   app.use(express.static(distPath));
   app.get(/^(?!\/api\/).*/, (_req, res) => {
     res.sendFile(path.join(distPath, "index.html"));
@@ -257,7 +458,27 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: message });
 });
 
-app.listen(port, host, () => {
+const server = app.listen(port, host, () => {
   console.log(`CPD server listening on http://${host}:${port}`);
-  console.log(`Static UI: ${fs.existsSync(distPath) ? "enabled (dist/)" : "not found — run npm run build"}`);
+  console.log(`API build ${API_BUILD} — /api/ping, /api/auth/microsoft, /api/users-by-department`);
+  if (isMicrosoftSsoConfigured()) {
+    console.log("Microsoft SSO: enabled");
+  } else {
+    console.log("Microsoft SSO: disabled (set AZURE_* in .env)");
+  }
+  console.log(
+    serveStatic
+      ? "Static UI: enabled (dist/) — for local dev prefer SERVE_STATIC=0 and http://localhost:8080"
+      : "Static UI: disabled (API only) — use Vite on :8080",
+  );
+});
+
+server.on("error", (err) => {
+  if (err?.code === "EADDRINUSE") {
+    console.error(`Port ${port} is already in use. Stop the old Node process, then run npm run server again.`);
+    console.error("Windows: netstat -ano | findstr :3001  then  taskkill /PID <pid> /F");
+  } else {
+    console.error("Server error:", err);
+  }
+  process.exit(1);
 });

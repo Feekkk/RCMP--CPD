@@ -1,10 +1,9 @@
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -30,13 +29,39 @@ function MicrosoftLogo({ className }: { className?: string }) {
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showPassword, setShowPassword] = React.useState(false);
   const [staffId, setStaffId] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [ssoLoading, setSsoLoading] = React.useState(false);
+  const [microsoftSsoEnabled, setMicrosoftSsoEnabled] = React.useState(false);
   const [rateLimitRemaining, setRateLimitRemaining] = React.useState<number | null>(null);
-  const [rateLimitReset, setRateLimitReset] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    const ssoError = searchParams.get("sso_error");
+    if (ssoError) {
+      setError(ssoError);
+      const next = new URLSearchParams(searchParams);
+      next.delete("sso_error");
+      next.delete("sso_code");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  React.useEffect(() => {
+    fetch("/api/auth/microsoft/status")
+      .then((res) => res.json())
+      .then((data: { enabled?: boolean }) => setMicrosoftSsoEnabled(Boolean(data.enabled)))
+      .catch(() => setMicrosoftSsoEnabled(false));
+  }, []);
+
+  const startMicrosoftLogin = () => {
+    setError(null);
+    setSsoLoading(true);
+    window.location.href = "/api/auth/microsoft";
+  };
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -78,15 +103,9 @@ const Login = () => {
                       body: JSON.stringify({ staffId: id, password }),
                     });
 
-                    // Parse rate limit headers
                     const remaining = res.headers.get("ratelimit-remaining");
-                    const resetTime = res.headers.get("ratelimit-reset");
-                    
                     if (remaining !== null) {
                       setRateLimitRemaining(parseInt(remaining, 10));
-                    }
-                    if (resetTime !== null) {
-                      setRateLimitReset(parseInt(resetTime, 10) * 1000);
                     }
 
                     const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
@@ -98,9 +117,7 @@ const Login = () => {
                       }
 
                       if (res.status === 429) {
-                        const resetMs = resetTime ? parseInt(resetTime, 10) * 1000 : null;
-                        const minutesLeft = resetMs ? Math.ceil((resetMs - Date.now()) / 60000) : 15;
-                        setError(`Too many login attempts. Please try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.`);
+                        setError("Too many login attempts. Please try again later.");
                         return;
                       }
 
@@ -123,7 +140,7 @@ const Login = () => {
                     navigate(data.redirect);
                   } catch {
                     setError(
-                      "Cannot reach the login API. Ensure the Node app is running and /api requests are proxied to it (e.g. npm start on server).",
+                      "Cannot reach the login API. Run npm run dev:full locally, or ensure the Node app is running on the server.",
                     );
                   } finally {
                     setSubmitting(false);
@@ -144,9 +161,7 @@ const Login = () => {
                 </div>
 
                 <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                  </div>
+                  <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -168,9 +183,9 @@ const Login = () => {
                   </div>
                 </div>
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={submitting || (rateLimitRemaining !== null && rateLimitRemaining <= 0)}
                 >
                   {submitting ? "Signing in…" : "Login"}
@@ -187,22 +202,35 @@ const Login = () => {
                   type="button"
                   variant="outline"
                   className="w-full gap-2"
-                  disabled
-                  title="Coming soon"
-                  aria-label="Login with Microsoft SSO — coming soon"
+                  disabled={!microsoftSsoEnabled || ssoLoading}
+                  title={
+                    microsoftSsoEnabled
+                      ? "Sign in with your UniKL Microsoft account"
+                      : "Microsoft SSO is not configured on the server yet"
+                  }
+                  onClick={startMicrosoftLogin}
                 >
-                  <MicrosoftLogo className="h-4 w-4 shrink-0" />
+                  {ssoLoading ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  ) : (
+                    <MicrosoftLogo className="h-4 w-4 shrink-0" />
+                  )}
                   <span className="flex-1 text-center">Microsoft SSO</span>
-                  <span className="text-xs font-medium text-muted-foreground">Coming soon</span>
                 </Button>
 
+                {!microsoftSsoEnabled ? (
+                  <p className="text-center text-xs text-muted-foreground">
+                    SSO unavailable until Azure credentials are set in the server <code className="text-xs">.env</code>.
+                  </p>
+                ) : null}
+
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
-                
-                {rateLimitRemaining !== null && rateLimitRemaining > 0 && (
-                  <p className="text-sm text-muted-foreground text-center">
+
+                {rateLimitRemaining !== null && rateLimitRemaining > 0 ? (
+                  <p className="text-center text-sm text-muted-foreground">
                     Attempts remaining: <span className="font-semibold">{rateLimitRemaining}</span>/5
                   </p>
-                )}
+                ) : null}
 
                 <p className="text-center text-sm text-muted-foreground">
                   Cannot access the system?{" "}

@@ -75,7 +75,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 3;
+const API_BUILD = 4;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -162,8 +162,11 @@ apiRouter.get("/ping", (_req, res) => {
       staffCrud: true,
       microsoftSso: isMicrosoftSsoConfigured(),
     },
+    authRoutes: ["/api/auth/microsoft", "/api/auth/microsoft/callback"],
   });
 });
+
+registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
 
 apiRouter.post("/login", loginLimiter, async (req, res) => {
   const staffIdRaw = req.body?.staffId;
@@ -426,8 +429,6 @@ apiRouter.get("/health", generalLimiter, async (_req, res) => {
   }
 });
 
-registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
-
 apiRouter.use((req, res) => {
   res.status(404).json({
     error: "API route not found.",
@@ -435,7 +436,7 @@ apiRouter.use((req, res) => {
     path: req.originalUrl,
     apiBuild: API_BUILD,
     hint:
-      "Restart the Node API (npm run server). Local dev: use npm run dev:full and open http://localhost:8080. Verify GET /api/ping returns apiBuild 3.",
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 4.",
   });
 });
 
@@ -447,6 +448,20 @@ if (serveStatic) {
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
+
+app.use((req, res) => {
+  if (req.path.startsWith("/api") || req.originalUrl.startsWith("/api")) {
+    return res.status(404).json({
+      error: "API route not found.",
+      method: req.method,
+      path: req.originalUrl,
+      apiBuild: API_BUILD,
+      hint:
+        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 4.",
+    });
+  }
+  res.status(404).type("text").send("Not found");
+});
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);

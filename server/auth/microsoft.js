@@ -146,6 +146,11 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
         hint: "Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, and AZURE_REDIRECT_URI in .env",
       });
     });
+    apiRouter.get("/auth/microsoft/callback", (_req, res) => {
+      res.status(503).json({
+        error: "Microsoft SSO is not configured on the server.",
+      });
+    });
     return;
   }
 

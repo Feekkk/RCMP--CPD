@@ -74,7 +74,7 @@ async function getOidcConfig() {
 
 async function findStaffByEmail(pool, email) {
   const [rows] = await pool.execute(
-    `SELECT s.staff_id, s.full_name, s.email_address, s.department_id,
+    `SELECT s.staff_id, s.full_name, s.email_address, s.phone_number, s.department_id,
             d.department_name, s.role_id, r.role_name
      FROM staff s
      INNER JOIN role_table r ON r.role_id = s.role_id
@@ -98,15 +98,31 @@ function emailFromClaims(claims) {
   return null;
 }
 
-export function attachSessionUser(req, row) {
+function profileFromClaims(claims) {
+  const email = emailFromClaims(claims);
+  return {
+    name: typeof claims?.name === "string" ? claims.name.trim() : null,
+    givenName: typeof claims?.given_name === "string" ? claims.given_name.trim() : null,
+    familyName: typeof claims?.family_name === "string" ? claims.family_name.trim() : null,
+    email,
+    preferredUsername:
+      typeof claims?.preferred_username === "string" ? claims.preferred_username.trim() : null,
+    picture: typeof claims?.picture === "string" ? claims.picture.trim() : null,
+  };
+}
+
+export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {
   req.session.user = {
     staffId: row.staff_id,
     fullName: row.full_name,
     email: row.email_address,
+    phoneNumber: row.phone_number ?? null,
     departmentId: row.department_id,
     departmentName: row.department_name,
     roleId: row.role_id,
     roleName: row.role_name,
+    authProvider: microsoftProfile ? "microsoft" : "password",
+    microsoft: microsoftProfile,
   };
 }
 
@@ -247,7 +263,7 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
         );
       }
 
-      attachSessionUser(req, row);
+      attachSessionUser(req, row, { microsoftProfile: profileFromClaims(claims) });
       const destination = `${appOrigin(req)}${dashboardPathForRole(row.role_id)}`;
 
       req.session.save((saveErr) => {

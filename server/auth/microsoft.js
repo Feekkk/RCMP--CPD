@@ -17,6 +17,26 @@ export function isMicrosoftSsoConfigured() {
   );
 }
 
+function getOAuthScopes() {
+  return trimEnv(process.env.AZURE_OAUTH_SCOPES) ?? "openid profile email offline_access User.Read";
+}
+
+function getGraphConfig() {
+  const baseUrl = (trimEnv(process.env.AZURE_GRAPH_API_URL) ?? "https://graph.microsoft.com/v1.0").replace(/\/$/, "");
+  const mePath = trimEnv(process.env.AZURE_GRAPH_ME_PATH) ?? "/me";
+  const meSelect =
+    trimEnv(process.env.AZURE_GRAPH_ME_SELECT) ??
+    "id,displayName,mail,userPrincipalName,jobTitle,officeLocation";
+
+  return { baseUrl, mePath, meSelect };
+}
+
+function buildGraphMePath() {
+  const { mePath, meSelect } = getGraphConfig();
+  const separator = mePath.includes("?") ? "&" : "?";
+  return `${mePath}${separator}$select=${encodeURIComponent(meSelect)}`;
+}
+
 function getRedirectUri() {
   return trimEnv(process.env.AZURE_REDIRECT_URI);
 }
@@ -31,7 +51,7 @@ function buildMicrosoftAuthorizeUrl({ tenantId, clientId, redirectUri, state, co
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_mode", "query");
-  url.searchParams.set("scope", "openid profile email offline_access User.Read");
+  url.searchParams.set("scope", getOAuthScopes());
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
@@ -124,12 +144,14 @@ function attachEntraSession(req, tokens) {
     refreshToken: tokens.refresh_token ?? null,
     expiresAt: Date.now() + expiresIn * 1000,
     idTokenClaims: serializeClaims(claims),
-    scopes: typeof tokens.scope === "string" ? tokens.scope : "openid profile email offline_access User.Read",
+    scopes: typeof tokens.scope === "string" ? tokens.scope : getOAuthScopes(),
   };
 }
 
-async function fetchGraphJson(accessToken, path) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+async function fetchGraphJson(accessToken, graphPath) {
+  const { baseUrl } = getGraphConfig();
+  const normalizedPath = graphPath.startsWith("/") ? graphPath : `/${graphPath}`;
+  const res = await fetch(`${baseUrl}${normalizedPath}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
@@ -145,6 +167,68 @@ async function fetchGraphJson(accessToken, path) {
     };
   }
   return { ok: true, status: res.status, data: body };
+}
+
+function mapGraphUserToProfile(graphUser, idTokenClaims = {}) {
+  const email =
+    (typeof graphUser?.mail === "string" && graphUser.mail.trim()) ||
+    (typeof graphUser?.userPrincipalName === "string" && graphUser.userPrincipalName.trim()) ||
+    (typeof idTokenClaims?.email === "string" && idTokenClaims.email) ||
+    (typeof idTokenClaims?.preferred_username === "string" && idTokenClaims.preferred_username) ||
+    null;
+
+  return {
+    oid:
+      (typeof graphUser?.id === "string" && graphUser.id) ||
+      (typeof idTokenClaims?.oid === "string" && idTokenClaims.oid) ||
+      null,
+    name:
+      (typeof graphUser?.displayName === "string" && graphUser.displayName.trim()) ||
+      (typeof idTokenClaims?.name === "string" && idTokenClaims.name) ||
+      null,
+    email,
+    jobTitle: typeof graphUser?.jobTitle === "string" ? graphUser.jobTitle.trim() || null : null,
+    officeLocation:
+      typeof graphUser?.officeLocation === "string" ? graphUser.officeLocation.trim() || null : null,
+  };
+}
+
+async function buildEntraProfilePayload(req) {
+  const entra = req.session?.entra;
+  if (!entra) {
+    return { error: "No Microsoft Entra session. Sign in with Microsoft SSO first.", status: 401 };
+  }
+
+  const accessToken = await getEntraAccessToken(req);
+  const graphConfig = getGraphConfig();
+  const graphPath = buildGraphMePath();
+
+  if (!accessToken) {
+    return {
+      error: "Access token missing or refresh failed. Sign in again with Microsoft SSO.",
+      status: 401,
+    };
+  }
+
+  const graphResult = await fetchGraphJson(accessToken, graphPath);
+  if (!graphResult.ok) {
+    return {
+      error: graphResult.error ?? "Microsoft Graph request failed.",
+      status: graphResult.status === 401 || graphResult.status === 403 ? graphResult.status : 502,
+      graphPath,
+      graphConfig,
+    };
+  }
+
+  return {
+    source: "microsoft-graph",
+    fetchedAt: new Date().toISOString(),
+    scopes: entra.scopes,
+    graphPath,
+    graphConfig,
+    profile: mapGraphUserToProfile(graphResult.data, entra.idTokenClaims),
+    rawGraphUser: graphResult.data,
+  };
 }
 
 async function refreshEntraAccessToken(req) {
@@ -169,45 +253,6 @@ async function getEntraAccessToken(req) {
     return refreshEntraAccessToken(req);
   }
   return entra.accessToken;
-}
-
-async function buildEntraProfilePayload(req) {
-  const entra = req.session?.entra;
-  if (!entra) {
-    return { error: "No Microsoft Entra session. Sign in with Microsoft SSO first.", status: 401 };
-  }
-
-  const accessToken = await getEntraAccessToken(req);
-  const graphRequests = [
-    { name: "GET /me", path: "/me" },
-    {
-      name: "GET /me (extended select)",
-      path: "/me?$select=id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones,preferredLanguage,usageLocation,employeeId,employeeType,companyName,country,city,state,streetAddress,postalCode,onPremisesSamAccountName,onPremisesUserPrincipalName,onPremisesDistinguishedName,accountEnabled,createdDateTime",
-    },
-    { name: "GET /me/manager", path: "/me/manager" },
-    { name: "GET /me/memberOf", path: "/me/memberOf?$top=25" },
-    { name: "GET /me/photo/metadata", path: "/me/photo" },
-  ];
-
-  const microsoftGraph = {};
-  if (!accessToken) {
-    microsoftGraph.tokenError = "Access token missing or refresh failed. Sign in again with Microsoft SSO.";
-  } else {
-    for (const request of graphRequests) {
-      const result = await fetchGraphJson(accessToken, request.path);
-      microsoftGraph[request.name] = result.ok
-        ? { status: result.status, data: result.data }
-        : { status: result.status, error: result.error, details: result.body };
-    }
-  }
-
-  return {
-    source: "microsoft-entra-id",
-    fetchedAt: new Date().toISOString(),
-    scopes: entra.scopes,
-    idTokenClaims: entra.idTokenClaims,
-    microsoftGraph,
-  };
 }
 
 export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {

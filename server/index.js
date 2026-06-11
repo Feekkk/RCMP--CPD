@@ -75,7 +75,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 5;
+const API_BUILD = 6;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -441,7 +441,7 @@ apiRouter.use((req, res) => {
     path: req.originalUrl,
     apiBuild: API_BUILD,
     hint:
-      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 5.",
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 6.",
   });
 });
 
@@ -462,7 +462,7 @@ app.use((req, res) => {
       path: req.originalUrl,
       apiBuild: API_BUILD,
       hint:
-        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 5.",
+        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 6.",
     });
   }
   res.status(404).type("text").send("Not found");

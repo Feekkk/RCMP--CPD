@@ -95,12 +95,12 @@ async function checkApiBuild(): Promise<{ ok: boolean; apiBuild?: number; messag
     if (!res.ok) {
       return { ok: false, message: "Cannot reach /api/ping. Run npm run dev:full (not npm run dev alone)." };
     }
-    if (data.apiBuild !== 5 || data.features?.staffCrud !== true) {
+    if (data.apiBuild !== 6 || data.features?.staffCrud !== true) {
       return {
         ok: false,
         apiBuild: data.apiBuild,
         message:
-          "Port 3001 is running an old API. Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild 5 and staffCrud true.",
+          "Port 3001 is running an old API. Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild 6 and staffCrud true.",
       };
     }
     return { ok: true, apiBuild: data.apiBuild };
@@ -137,7 +137,7 @@ async function fetchUsersByDepartment(): Promise<UsersByDepartmentResponse> {
   }
 
   throw new Error(
-    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild 5.`,
+    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild 6.`,
   );
 }
 

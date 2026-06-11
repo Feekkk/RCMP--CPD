@@ -1,24 +1,27 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Settings as SettingsIcon } from "lucide-react";
+import { Loader2, RefreshCw, Settings as SettingsIcon, User } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StaffSidebar } from "@/staff/Sidebar";
 
-type GraphEndpointResult =
-  | { status: number; data: unknown }
-  | { status: number; error: string; details?: unknown };
+type EntraProfile = {
+  oid: string | null;
+  name: string | null;
+  email: string | null;
+  jobTitle: string | null;
+  officeLocation: string | null;
+};
 
 type EntraProfileResponse = {
   source: string;
   fetchedAt: string;
-  scopes: string;
-  idTokenClaims: Record<string, unknown>;
-  microsoftGraph: Record<string, GraphEndpointResult | { tokenError: string }>;
+  profile: EntraProfile;
+  graphPath: string;
 };
 
 async function fetchEntraProfile(): Promise<EntraProfileResponse> {
@@ -26,78 +29,28 @@ async function fetchEntraProfile(): Promise<EntraProfileResponse> {
   const data = (await res.json().catch(() => ({}))) as EntraProfileResponse & {
     error?: string;
     hint?: string;
-    apiBuild?: number;
   };
   if (!res.ok) {
     if (res.status === 404) {
       throw new Error(
         data.hint ??
-          "API route not found. Restart the Node API (npm run dev:full locally, or redeploy + restart on Plesk). Check /api/ping for apiBuild 5.",
+          "API route not found. Restart the Node API (npm run dev:full locally, or redeploy + restart on Plesk). Check /api/ping for apiBuild 6.",
       );
     }
-    throw new Error(data.error ?? "Unable to load Entra ID profile.");
+    throw new Error(data.error ?? "Unable to load Microsoft Graph profile.");
   }
   return data;
 }
 
-function JsonBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="max-h-[28rem] overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
+function displayValue(value: string | null) {
+  return value?.trim() ? value : "—";
 }
 
-function ClaimGrid({ claims }: { claims: Record<string, unknown> }) {
-  const entries = Object.entries(claims).sort(([a], [b]) => a.localeCompare(b));
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No claims returned.</p>;
-  }
-  return (
-    <div className="rounded-lg border">
-      <div className="grid gap-px bg-border sm:grid-cols-2">
-        {entries.map(([key, value]) => (
-          <React.Fragment key={key}>
-            <div className="bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground">{key}</div>
-            <div className="break-all bg-background px-3 py-2 text-sm">
-              {typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "—")}
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GraphSection({ graph }: { graph: EntraProfileResponse["microsoftGraph"] }) {
-  const entries = Object.entries(graph);
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No Graph responses.</p>;
-  }
-
-  return (
-    <div className="grid gap-4">
-      {entries.map(([name, result]) => {
-        const isError = "error" in result || "tokenError" in result;
-        return (
-          <div key={name} className="grid gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold">{name}</p>
-              {"status" in result ? <Badge variant={isError ? "destructive" : "secondary"}>{result.status}</Badge> : null}
-              {"tokenError" in result ? <Badge variant="destructive">No token</Badge> : null}
-            </div>
-            {"tokenError" in result ? (
-              <p className="text-sm text-destructive">{result.tokenError}</p>
-            ) : "error" in result ? (
-              <JsonBlock value={{ error: result.error, details: result.details }} />
-            ) : (
-              <JsonBlock value={result.data} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+function initialsFromName(name: string | null) {
+  if (!name?.trim()) return "ST";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
 }
 
 export function Settings() {
@@ -107,22 +60,7 @@ export function Settings() {
     retry: false,
   });
 
-  const meResult = data?.microsoftGraph["GET /me"];
-  const graphDisplayName =
-    meResult && "data" in meResult && meResult.data && typeof meResult.data === "object"
-      ? (meResult.data as { displayName?: string }).displayName
-      : null;
-
-  const displayName =
-    (typeof data?.idTokenClaims?.name === "string" && data.idTokenClaims.name) ||
-    graphDisplayName ||
-    "Entra ID user";
-
-  const email =
-    (typeof data?.idTokenClaims?.preferred_username === "string" && data.idTokenClaims.preferred_username) ||
-    (typeof data?.idTokenClaims?.email === "string" && data.idTokenClaims.email) ||
-    (typeof data?.idTokenClaims?.upn === "string" && data.idTokenClaims.upn) ||
-    null;
+  const profile = data?.profile;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -136,9 +74,9 @@ export function Settings() {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
-                <h1 className="font-display text-2xl font-bold tracking-tight">Entra ID test profile</h1>
+                <h1 className="font-display text-2xl font-bold tracking-tight">Profile</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Live data from Microsoft Entra ID only — not loaded from the CPD database.
+                  Loaded live from Microsoft Graph API (Entra ID).
                 </p>
               </div>
             </div>
@@ -151,68 +89,104 @@ export function Settings() {
               onClick={() => refetch()}
             >
               {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refresh from Entra
+              Refresh
             </Button>
           </div>
 
           <Card className="mt-6">
-            <CardContent className="p-4 sm:p-6">
+            <CardHeader>
+              <CardTitle>Microsoft Entra profile</CardTitle>
+              <CardDescription>
+                Read-only fields from Graph API. Sign in with Microsoft SSO to load your organisation profile.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               {isLoading ? (
                 <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Fetching from Microsoft Entra ID…</span>
+                  <span className="text-sm">Fetching from Microsoft Graph…</span>
                 </div>
               ) : isError ? (
                 <div className="grid gap-4 py-8 text-center">
                   <p className="text-sm font-medium text-destructive">
-                    {error instanceof Error ? error.message : "Unable to load Entra ID profile."}
+                    {error instanceof Error ? error.message : "Unable to load profile."}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Sign in with Microsoft SSO, then return here. Existing sessions from before this update may need a
-                    fresh sign-in so the server can store Entra tokens.
+                    Sign in with Microsoft SSO, then return here. If you recently updated the server, sign in again so
+                    Entra tokens are stored in your session.
                   </p>
                   <Button asChild className="mx-auto w-fit">
                     <Link to="/login">Go to login</Link>
                   </Button>
                 </div>
-              ) : (
+              ) : profile ? (
                 <div className="grid gap-6">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge>{displayName}</Badge>
-                    {email ? <Badge variant="outline">{email}</Badge> : null}
-                    <Badge variant="secondary">Scopes: {data.scopes}</Badge>
-                    <span className="text-xs text-muted-foreground">Fetched {new Date(data.fetchedAt).toLocaleString()}</span>
+                  <div className="flex items-center gap-4 rounded-xl border bg-muted/20 p-4">
+                    <Avatar className="h-14 w-14 border border-border">
+                      <AvatarFallback className="bg-primary/10 text-primary">
+                        {initialsFromName(profile.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-display text-lg font-semibold tracking-tight">
+                        {displayValue(profile.name)}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">{displayValue(profile.email)}</p>
+                      {data.fetchedAt ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Last updated {new Date(data.fetchedAt).toLocaleString()}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
-                  <Separator />
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>OID</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead className="hidden md:table-cell">Job title</TableHead>
+                          <TableHead className="hidden lg:table-cell">Office location</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="max-w-[12rem] break-all font-mono text-xs sm:max-w-none sm:text-sm">
+                            {displayValue(profile.oid)}
+                          </TableCell>
+                          <TableCell className="font-medium">{displayValue(profile.name)}</TableCell>
+                          <TableCell className="break-all">{displayValue(profile.email)}</TableCell>
+                          <TableCell className="hidden md:table-cell">{displayValue(profile.jobTitle)}</TableCell>
+                          <TableCell className="hidden lg:table-cell">{displayValue(profile.officeLocation)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">ID token claims</CardTitle>
-                      <CardDescription>
-                        Returned at sign-in from Entra ID (OpenID Connect). No CPD database lookup.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <ClaimGrid claims={data.idTokenClaims} />
-                      <JsonBlock value={data.idTokenClaims} />
-                    </CardContent>
-                  </Card>
+                  <div className="grid gap-3 md:hidden">
+                    <div className="rounded-lg border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Job title</p>
+                      <p className="mt-1 text-sm">{displayValue(profile.jobTitle)}</p>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                        Office location
+                      </p>
+                      <p className="mt-1 text-sm">{displayValue(profile.officeLocation)}</p>
+                    </div>
+                  </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Microsoft Graph API</CardTitle>
-                      <CardDescription>
-                        Live calls to Graph using your SSO access token. Some endpoints may fail if IT has not granted
-                        extra permissions — errors are shown for testing.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <GraphSection graph={data.microsoftGraph} />
-                    </CardContent>
-                  </Card>
+                  <div className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
+                    <User className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      Graph path: <span className="font-mono">{data.graphPath}</span>. Configure via{" "}
+                      <span className="font-mono">AZURE_GRAPH_*</span> variables in <span className="font-mono">.env</span>.
+                    </p>
+                  </div>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </div>

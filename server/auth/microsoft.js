@@ -31,7 +31,7 @@ function buildMicrosoftAuthorizeUrl({ tenantId, clientId, redirectUri, state, co
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_mode", "query");
-  url.searchParams.set("scope", "openid profile email offline_access");
+  url.searchParams.set("scope", "openid profile email offline_access User.Read");
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
@@ -111,6 +111,105 @@ function profileFromClaims(claims) {
   };
 }
 
+function serializeClaims(claims) {
+  if (!claims || typeof claims !== "object") return {};
+  return JSON.parse(JSON.stringify(claims));
+}
+
+function attachEntraSession(req, tokens) {
+  const claims = tokens.claims();
+  const expiresIn = Number(tokens.expires_in ?? 3600);
+  req.session.entra = {
+    accessToken: tokens.access_token ?? null,
+    refreshToken: tokens.refresh_token ?? null,
+    expiresAt: Date.now() + expiresIn * 1000,
+    idTokenClaims: serializeClaims(claims),
+    scopes: typeof tokens.scope === "string" ? tokens.scope : "openid profile email offline_access User.Read",
+  };
+}
+
+async function fetchGraphJson(accessToken, path) {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error: body?.error?.message ?? body?.error?.code ?? res.statusText,
+      body,
+    };
+  }
+  return { ok: true, status: res.status, data: body };
+}
+
+async function refreshEntraAccessToken(req) {
+  const entra = req.session?.entra;
+  if (!entra?.refreshToken) {
+    return null;
+  }
+  const config = await getOidcConfig();
+  const tokens = await client.refreshTokenGrant(config, entra.refreshToken, {
+    scope: entra.scopes,
+  });
+  attachEntraSession(req, tokens);
+  return req.session.entra.accessToken;
+}
+
+async function getEntraAccessToken(req) {
+  const entra = req.session?.entra;
+  if (!entra?.accessToken) {
+    return null;
+  }
+  if (entra.expiresAt && Date.now() >= entra.expiresAt - 60_000) {
+    return refreshEntraAccessToken(req);
+  }
+  return entra.accessToken;
+}
+
+async function buildEntraProfilePayload(req) {
+  const entra = req.session?.entra;
+  if (!entra) {
+    return { error: "No Microsoft Entra session. Sign in with Microsoft SSO first.", status: 401 };
+  }
+
+  const accessToken = await getEntraAccessToken(req);
+  const graphRequests = [
+    { name: "GET /me", path: "/me" },
+    {
+      name: "GET /me (extended select)",
+      path: "/me?$select=id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones,preferredLanguage,usageLocation,employeeId,employeeType,companyName,country,city,state,streetAddress,postalCode,onPremisesSamAccountName,onPremisesUserPrincipalName,onPremisesDistinguishedName,accountEnabled,createdDateTime",
+    },
+    { name: "GET /me/manager", path: "/me/manager" },
+    { name: "GET /me/memberOf", path: "/me/memberOf?$top=25" },
+    { name: "GET /me/photo/metadata", path: "/me/photo" },
+  ];
+
+  const microsoftGraph = {};
+  if (!accessToken) {
+    microsoftGraph.tokenError = "Access token missing or refresh failed. Sign in again with Microsoft SSO.";
+  } else {
+    for (const request of graphRequests) {
+      const result = await fetchGraphJson(accessToken, request.path);
+      microsoftGraph[request.name] = result.ok
+        ? { status: result.status, data: result.data }
+        : { status: result.status, error: result.error, details: result.body };
+    }
+  }
+
+  return {
+    source: "microsoft-entra-id",
+    fetchedAt: new Date().toISOString(),
+    scopes: entra.scopes,
+    idTokenClaims: entra.idTokenClaims,
+    microsoftGraph,
+  };
+}
+
 export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {
   req.session.user = {
     staffId: row.staff_id,
@@ -142,6 +241,19 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
       ...req.session.user,
       redirect: dashboardPathForRole(req.session.user.roleId),
     });
+  });
+
+  apiRouter.get("/auth/entra/profile", async (req, res) => {
+    try {
+      const payload = await buildEntraProfilePayload(req);
+      if (payload.error) {
+        return res.status(payload.status ?? 401).json({ error: payload.error });
+      }
+      return res.json(payload);
+    } catch (err) {
+      console.error("Entra profile fetch error:", err);
+      return res.status(500).json({ error: "Failed to fetch Entra ID profile." });
+    }
   });
 
   apiRouter.post("/auth/logout", (req, res) => {
@@ -263,6 +375,7 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
         );
       }
 
+      attachEntraSession(req, tokens);
       attachSessionUser(req, row, { microsoftProfile: profileFromClaims(claims) });
       const destination = `${appOrigin(req)}${dashboardPathForRole(row.role_id)}`;
 

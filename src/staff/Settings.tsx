@@ -23,8 +23,18 @@ type EntraProfileResponse = {
 
 async function fetchEntraProfile(): Promise<EntraProfileResponse> {
   const res = await fetch("/api/auth/entra/profile", { credentials: "include" });
-  const data = (await res.json().catch(() => ({}))) as EntraProfileResponse & { error?: string };
+  const data = (await res.json().catch(() => ({}))) as EntraProfileResponse & {
+    error?: string;
+    hint?: string;
+    apiBuild?: number;
+  };
   if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error(
+        data.hint ??
+          "API route not found. Restart the Node API (npm run dev:full locally, or redeploy + restart on Plesk). Check /api/ping for apiBuild 5.",
+      );
+    }
     throw new Error(data.error ?? "Unable to load Entra ID profile.");
   }
   return data;

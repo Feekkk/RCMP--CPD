@@ -75,7 +75,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 4;
+const API_BUILD = 5;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -162,7 +162,12 @@ apiRouter.get("/ping", (_req, res) => {
       staffCrud: true,
       microsoftSso: isMicrosoftSsoConfigured(),
     },
-    authRoutes: ["/api/auth/microsoft", "/api/auth/microsoft/callback"],
+    authRoutes: [
+      "/api/auth/microsoft",
+      "/api/auth/microsoft/callback",
+      "/api/auth/entra/profile",
+      "/api/auth/me",
+    ],
   });
 });
 
@@ -436,7 +441,7 @@ apiRouter.use((req, res) => {
     path: req.originalUrl,
     apiBuild: API_BUILD,
     hint:
-      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 4.",
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 5.",
   });
 });
 
@@ -457,7 +462,7 @@ app.use((req, res) => {
       path: req.originalUrl,
       apiBuild: API_BUILD,
       hint:
-        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 4.",
+        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 5.",
     });
   }
   res.status(404).type("text").send("Not found");
@@ -475,7 +480,7 @@ app.use((err, _req, res, _next) => {
 
 const server = app.listen(port, host, () => {
   console.log(`CPD server listening on http://${host}:${port}`);
-  console.log(`API build ${API_BUILD} — /api/ping, /api/auth/microsoft, /api/users-by-department`);
+  console.log(`API build ${API_BUILD} — /api/ping, /api/auth/entra/profile, /api/users-by-department`);
   if (isMicrosoftSsoConfigured()) {
     console.log("Microsoft SSO: enabled");
   } else {

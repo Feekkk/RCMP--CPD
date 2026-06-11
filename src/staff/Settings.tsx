@@ -76,28 +76,17 @@ export function Settings() {
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
                 <h1 className="font-display text-2xl font-bold tracking-tight">Profile</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Loaded live from Microsoft Graph API (Entra ID).
+                  Your personal data is managed by Microsoft Entra.
                 </p>
-              </div>
+              </div>  
             </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={isLoading || isFetching}
-              onClick={() => refetch()}
-            >
-              {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refresh
-            </Button>
           </div>
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Microsoft Entra profile</CardTitle>
+              <CardTitle>Staff Profile</CardTitle>
               <CardDescription>
-                Read-only fields from Graph API. Sign in with Microsoft SSO to load your organisation profile.
+                Read-only fields for your organisation profile. Please contact the IT team if you need to update your profile.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -144,11 +133,11 @@ export function Settings() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>OID</TableHead>
-                          <TableHead>Name</TableHead>
+                          <TableHead>Entra ID</TableHead>
+                          <TableHead>Full Name</TableHead>
                           <TableHead>Email</TableHead>
-                          <TableHead className="hidden md:table-cell">Job title</TableHead>
-                          <TableHead className="hidden lg:table-cell">Office location</TableHead>
+                          <TableHead className="hidden md:table-cell">Job Title</TableHead>
+                          <TableHead className="hidden lg:table-cell">Office Location</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -176,14 +165,6 @@ export function Settings() {
                       </p>
                       <p className="mt-1 text-sm">{displayValue(profile.officeLocation)}</p>
                     </div>
-                  </div>
-
-                  <div className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
-                    <User className="mt-0.5 h-4 w-4 shrink-0" />
-                    <p>
-                      Graph path: <span className="font-mono">{data.graphPath}</span>. Configure via{" "}
-                      <span className="font-mono">AZURE_GRAPH_*</span> variables in <span className="font-mono">.env</span>.
-                    </p>
                   </div>
                 </div>
               ) : null}

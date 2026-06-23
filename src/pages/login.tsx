@@ -66,7 +66,7 @@ const Login = () => {
 
               <div className="grid gap-4">
                 <p className="text-center text-sm text-muted-foreground">
-                  Sign in with your UniKL Microsoft account to continue.
+                  Sign in with UniKL Microsoft account to continue. System does not store any data from your account.
                 </p>
 
                 <Button

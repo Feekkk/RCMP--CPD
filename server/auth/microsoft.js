@@ -94,16 +94,20 @@ async function getOidcConfig() {
 
 async function findStaffByEmail(pool, email) {
   const [rows] = await pool.execute(
-    `SELECT s.staff_id, s.full_name, s.email_address, s.phone_number, s.department_id,
+    `SELECT s.id, s.entra_id, s.email, s.department_id,
             d.department_name, s.role_id, r.role_name
      FROM staff s
      INNER JOIN role_table r ON r.role_id = s.role_id
      INNER JOIN department_table d ON d.department_id = s.department_id
-     WHERE LOWER(s.email_address) = LOWER(?)
+     WHERE LOWER(s.email) = LOWER(?)
      LIMIT 1`,
     [email.trim()],
   );
   return rows[0] ?? null;
+}
+
+async function storeStaffEntraId(pool, staffId, entraId) {
+  await pool.execute(`UPDATE staff SET entra_id = ? WHERE id = ?`, [entraId, staffId]);
 }
 
 function emailFromClaims(claims) {
@@ -118,9 +122,20 @@ function emailFromClaims(claims) {
   return null;
 }
 
+function oidFromClaims(claims) {
+  if (typeof claims?.oid === "string" && claims.oid.trim()) {
+    return claims.oid.trim();
+  }
+  if (typeof claims?.sub === "string" && claims.sub.trim()) {
+    return claims.sub.trim();
+  }
+  return null;
+}
+
 function profileFromClaims(claims) {
   const email = emailFromClaims(claims);
   return {
+    oid: oidFromClaims(claims),
     name: typeof claims?.name === "string" ? claims.name.trim() : null,
     givenName: typeof claims?.given_name === "string" ? claims.given_name.trim() : null,
     familyName: typeof claims?.family_name === "string" ? claims.family_name.trim() : null,
@@ -257,15 +272,15 @@ async function getEntraAccessToken(req) {
 
 export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {
   req.session.user = {
-    staffId: row.staff_id,
-    fullName: row.full_name,
-    email: row.email_address,
-    phoneNumber: row.phone_number ?? null,
+    staffId: row.id,
+    fullName: microsoftProfile?.name ?? null,
+    email: row.email,
+    entraId: row.entra_id ?? microsoftProfile?.oid ?? null,
     departmentId: row.department_id,
     departmentName: row.department_name,
     roleId: row.role_id,
     roleName: row.role_name,
-    authProvider: microsoftProfile ? "microsoft" : "password",
+    authProvider: "microsoft",
     microsoft: microsoftProfile,
   };
 }
@@ -404,7 +419,7 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
           loginRedirect(
             req,
             "email",
-            "Microsoft account did not return an email address. Use Staff ID login or contact admin.",
+            "Microsoft account did not return an email address. Contact admin.",
           ),
         );
       }
@@ -420,8 +435,15 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
         );
       }
 
+      const oid = oidFromClaims(claims);
+      if (oid) {
+        await storeStaffEntraId(pool, row.id, oid);
+        row.entra_id = oid;
+      }
+
+      const microsoftProfile = profileFromClaims(claims);
       attachEntraSession(req, tokens);
-      attachSessionUser(req, row, { microsoftProfile: profileFromClaims(claims) });
+      attachSessionUser(req, row, { microsoftProfile });
       const destination = `${appOrigin(req)}${dashboardPathForRole(row.role_id)}`;
 
       req.session.save((saveErr) => {
@@ -433,8 +455,9 @@ export function registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForR
       });
     } catch (err) {
       console.error("Microsoft SSO callback error:", err);
+      const detail = err instanceof Error ? err.message : String(err);
       return res.redirect(
-        loginRedirect(req, "callback", "Microsoft sign-in failed. Try again or use Staff ID login."),
+        loginRedirect(req, "callback", `Microsoft sign-in failed: ${detail}`),
       );
     }
   });

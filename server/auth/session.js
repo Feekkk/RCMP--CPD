@@ -18,6 +18,7 @@ export function createSessionMiddleware() {
     console.warn("Using default SESSION_SECRET — set SESSION_SECRET in .env for production.");
   }
 
+  const trustProxy = process.env.TRUST_PROXY === "1";
   const secureCookie =
     process.env.SESSION_SECURE === "1" || trimEnv(process.env.APP_URL)?.startsWith("https://") === true;
 
@@ -26,6 +27,7 @@ export function createSessionMiddleware() {
     secret,
     resave: false,
     saveUninitialized: false,
+    proxy: trustProxy,
     cookie: {
       httpOnly: true,
       secure: secureCookie,

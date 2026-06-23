@@ -1,20 +1,10 @@
 import * as React from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-
-type LoginSuccess = {
-  staffId: number;
-  fullName: string;
-  roleId: number;
-  roleName: string;
-  redirect: string;
-};
 
 function MicrosoftLogo({ className }: { className?: string }) {
   return (
@@ -28,15 +18,9 @@ function MicrosoftLogo({ className }: { className?: string }) {
 }
 
 const Login = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [staffId, setStaffId] = React.useState("");
-  const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
   const [ssoLoading, setSsoLoading] = React.useState(false);
-  const [rateLimitRemaining, setRateLimitRemaining] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const ssoError = searchParams.get("sso_error");
@@ -80,119 +64,13 @@ const Login = () => {
                 </span>
               </div>
 
-              <form
-                className="grid gap-4"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setError(null);
-                  setSubmitting(true);
-
-                  const id = staffId.trim();
-                  try {
-                    const res = await fetch("/api/login", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ staffId: id, password }),
-                    });
-
-                    const remaining = res.headers.get("ratelimit-remaining");
-                    if (remaining !== null) {
-                      setRateLimitRemaining(parseInt(remaining, 10));
-                    }
-
-                    const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<LoginSuccess>;
-
-                    if (!res.ok) {
-                      if (typeof data.error === "string" && data.error.trim()) {
-                        setError(data.error);
-                        return;
-                      }
-
-                      if (res.status === 429) {
-                        setError("Too many login attempts. Please try again later.");
-                        return;
-                      }
-
-                      if (res.status >= 500) {
-                        setError(
-                          `Login service error (HTTP ${res.status}). Open /api/health in the browser — if it fails, check the Node app and database on the server.`,
-                        );
-                        return;
-                      }
-
-                      setError("Invalid Staff ID or password.");
-                      return;
-                    }
-
-                    if (!data.redirect || typeof data.redirect !== "string") {
-                      setError("Unexpected server response.");
-                      return;
-                    }
-
-                    navigate(data.redirect);
-                  } catch {
-                    setError(
-                      "Cannot reach the login API. Run npm run dev:full locally, or ensure the Node app is running on the server.",
-                    );
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
-              >
-                <div className="grid gap-2">
-                  <Label htmlFor="number">Staff ID</Label>
-                  <Input
-                    id="number"
-                    type="text"
-                    placeholder="Enter your staff ID"
-                    autoComplete="username"
-                    inputMode="numeric"
-                    value={staffId}
-                    onChange={(e) => setStaffId(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                      className="pr-10"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={submitting || (rateLimitRemaining !== null && rateLimitRemaining <= 0)}
-                >
-                  {submitting ? "Signing in…" : "Login"}
-                </Button>
-
-                <div className="relative py-1">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                    or
-                  </span>
-                </div>
+              <div className="grid gap-4">
+                <p className="text-center text-sm text-muted-foreground">
+                  Sign in with your UniKL Microsoft account to continue.
+                </p>
 
                 <Button
                   type="button"
-                  variant="outline"
                   className="w-full gap-2"
                   disabled={ssoLoading}
                   title="Sign in with your UniKL Microsoft account"
@@ -208,19 +86,13 @@ const Login = () => {
 
                 {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
 
-                {rateLimitRemaining !== null && rateLimitRemaining > 0 ? (
-                  <p className="text-center text-sm text-muted-foreground">
-                    Attempts remaining: <span className="font-semibold">{rateLimitRemaining}</span>/5
-                  </p>
-                ) : null}
-
                 <p className="text-center text-sm text-muted-foreground">
                   Cannot access the system?{" "}
                   <Button variant="link" asChild className="h-auto p-0">
                     <Link to="mailto:hcd@unikl.edu.my">Contact Admin</Link>
                   </Button>
                 </p>
-              </form>
+              </div>
             </div>
           </CardContent>
         </Card>

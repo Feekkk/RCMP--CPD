@@ -41,7 +41,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const USERS_QUERY_KEY = ["admin", "users-by-department"] as const;
-const DEFAULT_PASSWORD = "RCMP1234";
 
 type RoleOption = { roleId: number; roleName: string };
 
@@ -95,12 +94,12 @@ async function checkApiBuild(): Promise<{ ok: boolean; apiBuild?: number; messag
     if (!res.ok) {
       return { ok: false, message: "Cannot reach /api/ping. Run npm run dev:full (not npm run dev alone)." };
     }
-    if (data.apiBuild !== 6 || data.features?.staffCrud !== true) {
+    if (data.apiBuild !== 7 || data.features?.staffCrud !== true) {
       return {
         ok: false,
         apiBuild: data.apiBuild,
         message:
-          "Port 3001 is running an old API. Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild 6 and staffCrud true.",
+          "Port 3001 is running an old API. Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild 7 and staffCrud true.",
       };
     }
     return { ok: true, apiBuild: data.apiBuild };
@@ -137,7 +136,7 @@ async function fetchUsersByDepartment(): Promise<UsersByDepartmentResponse> {
   }
 
   throw new Error(
-    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild 6.`,
+    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild 7.`,
   );
 }
 
@@ -341,23 +340,15 @@ function DepartmentListButton({
 }
 
 type AddUserFormState = {
-  staffId: string;
-  fullName: string;
   email: string;
-  phoneNumber: string;
   departmentId: string;
   roleId: string;
-  password: string;
 };
 
 const emptyAddForm = (defaultDeptId?: number): AddUserFormState => ({
-  staffId: "",
-  fullName: "",
   email: "",
-  phoneNumber: "",
   departmentId: defaultDeptId != null ? String(defaultDeptId) : "",
   roleId: "1",
-  password: "",
 });
 
 function AddUserDialog({
@@ -384,15 +375,11 @@ function AddUserDialog({
 
   const createMutation = useMutation({
     mutationFn: async (payload: AddUserFormState) => {
-      const body: Record<string, unknown> = {
-        fullName: payload.fullName.trim(),
+      const body = {
         email: payload.email.trim(),
-        phoneNumber: payload.phoneNumber.trim(),
         departmentId: Number(payload.departmentId),
         roleId: Number(payload.roleId),
       };
-      if (payload.staffId.trim()) body.staffId = Number(payload.staffId.trim());
-      if (payload.password.trim()) body.password = payload.password.trim();
 
       const res = await apiFetch("/api/staff", {
         method: "POST",
@@ -403,7 +390,7 @@ function AddUserDialog({
     },
     onSuccess: (result) => {
       toast.success(result.message ?? "User added", {
-        description: `Staff ID ${result.staffId}. Default password: ${DEFAULT_PASSWORD} (unless you set another).`,
+        description: `Staff ID ${result.staffId}. They can sign in with Microsoft SSO.`,
       });
       queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
       onOpenChange(false);
@@ -413,8 +400,8 @@ function AddUserDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.fullName.trim() || !form.email.trim() || !form.phoneNumber.trim()) {
-      toast.error("Please fill in name, email, and phone number.");
+    if (!form.email.trim()) {
+      toast.error("Please enter an email address.");
       return;
     }
     if (!form.departmentId || !form.roleId) {
@@ -430,30 +417,10 @@ function AddUserDialog({
         <DialogHeader>
           <DialogTitle className="font-display">Add user</DialogTitle>
           <DialogDescription>
-            Create a staff account for the CPD portal. Leave Staff ID blank to auto-generate. Initial password
-            defaults to {DEFAULT_PASSWORD} unless you set one.
+            Register a staff email for the CPD portal. They sign in with Microsoft SSO using that address.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="add-staff-id">Staff ID (optional)</Label>
-            <Input
-              id="add-staff-id"
-              inputMode="numeric"
-              placeholder="Auto-generated if empty"
-              value={form.staffId}
-              onChange={(e) => setForm((f) => ({ ...f, staffId: e.target.value }))}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="add-full-name">Full name</Label>
-            <Input
-              id="add-full-name"
-              required
-              value={form.fullName}
-              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-            />
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="add-email">Email</Label>
             <Input
@@ -463,15 +430,6 @@ function AddUserDialog({
               placeholder="name@unikl.edu.my"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="add-phone">Phone number</Label>
-            <Input
-              id="add-phone"
-              required
-              value={form.phoneNumber}
-              onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
             />
           </div>
           <div className="grid gap-2">
@@ -506,17 +464,6 @@ function AddUserDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="add-password">Initial password (optional)</Label>
-            <Input
-              id="add-password"
-              type="password"
-              placeholder={DEFAULT_PASSWORD}
-              autoComplete="new-password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

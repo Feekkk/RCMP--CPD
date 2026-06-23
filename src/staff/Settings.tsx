@@ -34,7 +34,7 @@ async function fetchEntraProfile(): Promise<EntraProfileResponse> {
     if (res.status === 404) {
       throw new Error(
         data.hint ??
-          "API route not found. Restart the Node API (npm run dev:full locally, or redeploy + restart on Plesk). Check /api/ping for apiBuild 6.",
+          "API route not found. Restart the Node API (npm run dev:full locally, or redeploy + restart on Plesk). Check /api/ping for apiBuild 7.",
       );
     }
     throw new Error(data.error ?? "Unable to load Microsoft Graph profile.");

@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import mysql from "mysql2/promise";
-import bcrypt from "bcrypt";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
@@ -75,7 +74,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 6;
+const API_BUILD = 7;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -94,10 +93,10 @@ function mapLoginDbError(err) {
   const code = err?.code;
   const message = String(err?.message ?? "");
 
-  if (code === "ER_BAD_FIELD_ERROR" && message.includes("password_hash")) {
+  if (code === "ER_BAD_FIELD_ERROR" && message.includes("entra_id")) {
     return {
       status: 503,
-      error: "Database is missing the password_hash column. Run db/migration_add_password_hash.sql.",
+      error: "Database staff table is outdated. Import db/schema.sql (id, email, entra_id columns).",
     };
   }
   if (
@@ -142,7 +141,10 @@ function parsePositiveInt(value) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-const DEFAULT_STAFF_PASSWORD = "RCMP1234";
+function displayNameFromEmail(email) {
+  const local = String(email ?? "").split("@")[0] ?? "";
+  return local.replace(/[._-]+/g, " ").trim() || email;
+}
 
 async function fetchRoles() {
   const [rows] = await pool.execute(
@@ -173,59 +175,6 @@ apiRouter.get("/ping", (_req, res) => {
 
 registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
 
-apiRouter.post("/login", loginLimiter, async (req, res) => {
-  const staffIdRaw = req.body?.staffId;
-  const password = req.body?.password;
-
-  if (password == null || staffIdRaw === undefined || staffIdRaw === null || String(staffIdRaw).trim() === "") {
-    return res.status(400).json({ error: "Staff ID and password are required." });
-  }
-
-  const staffId = Number.parseInt(String(staffIdRaw).trim(), 10);
-  if (!Number.isFinite(staffId) || staffId <= 0) {
-    return res.status(400).json({ error: "Invalid Staff ID." });
-  }
-
-  try {
-    const [rows] = await pool.execute(
-      `SELECT s.staff_id, s.full_name, s.password_hash, s.role_id, r.role_name
-       FROM staff s
-       INNER JOIN role_table r ON r.role_id = s.role_id
-       WHERE s.staff_id = ?
-       LIMIT 1`,
-      [staffId],
-    );
-
-    const row = rows[0];
-    if (!row) {
-      return res.status(401).json({ error: "Invalid Staff ID or password." });
-    }
-
-    if (!row.password_hash || typeof row.password_hash !== "string") {
-      return res.status(503).json({
-        error: "Account has no password set. Run db/migration_add_password_hash.sql or re-import db/schema.sql.",
-      });
-    }
-
-    const ok = await bcrypt.compare(String(password), row.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: "Invalid Staff ID or password." });
-    }
-
-    return res.json({
-      staffId: row.staff_id,
-      fullName: row.full_name,
-      roleId: row.role_id,
-      roleName: row.role_name,
-      redirect: dashboardPathForRole(row.role_id),
-    });
-  } catch (err) {
-    console.error("Login error:", err);
-    const mapped = mapLoginDbError(err);
-    return res.status(mapped.status).json({ error: mapped.error });
-  }
-});
-
 async function handleUsersByDepartment(_req, res) {
   try {
     const [deptRows] = await pool.execute(
@@ -235,10 +184,10 @@ async function handleUsersByDepartment(_req, res) {
     );
 
     const [staffRows] = await pool.execute(
-      `SELECT s.staff_id, s.full_name, s.email_address, s.department_id, s.role_id, r.role_name
+      `SELECT s.id, s.entra_id, s.email, s.department_id, s.role_id, r.role_name
        FROM staff s
        INNER JOIN role_table r ON r.role_id = s.role_id
-       ORDER BY s.full_name`,
+       ORDER BY s.email`,
     );
 
     const staffByDept = new Map();
@@ -246,9 +195,10 @@ async function handleUsersByDepartment(_req, res) {
       const deptId = row.department_id;
       if (!staffByDept.has(deptId)) staffByDept.set(deptId, []);
       staffByDept.get(deptId).push({
-        staffId: row.staff_id,
-        fullName: row.full_name,
-        email: row.email_address,
+        staffId: row.id,
+        fullName: displayNameFromEmail(row.email),
+        email: row.email,
+        entraId: row.entra_id,
         departmentId: row.department_id,
         roleId: row.role_id,
         roleName: row.role_name,
@@ -295,52 +245,26 @@ async function handleUsersByDepartment(_req, res) {
 }
 
 apiRouter.post("/staff", generalLimiter, async (req, res) => {
-  const fullName = String(req.body?.fullName ?? "").trim();
   const email = String(req.body?.email ?? "").trim();
-  const phoneNumber = String(req.body?.phoneNumber ?? "").trim();
   const departmentId = parsePositiveInt(req.body?.departmentId);
   const roleId = parsePositiveInt(req.body?.roleId);
-  const staffId = parsePositiveInt(req.body?.staffId);
-  const passwordRaw = req.body?.password;
-  const password =
-    passwordRaw == null || String(passwordRaw).trim() === ""
-      ? DEFAULT_STAFF_PASSWORD
-      : String(passwordRaw);
 
-  if (!fullName || !email || !phoneNumber) {
-    return res.status(400).json({ error: "Full name, email, and phone number are required." });
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ error: "A valid email is required." });
   }
   if (!departmentId || !roleId) {
     return res.status(400).json({ error: "Department and role are required." });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters." });
-  }
 
   try {
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    if (staffId) {
-      await pool.execute(
-        `INSERT INTO staff (staff_id, full_name, email_address, phone_number, department_id, role_id, password_hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [staffId, fullName, email, phoneNumber, departmentId, roleId, passwordHash],
-      );
-    } else {
-      const [result] = await pool.execute(
-        `INSERT INTO staff (full_name, email_address, phone_number, department_id, role_id, password_hash)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [fullName, email, phoneNumber, departmentId, roleId, passwordHash],
-      );
-      return res.status(201).json({
-        staffId: result.insertId,
-        message: "Staff account created.",
-      });
-    }
+    const [result] = await pool.execute(
+      `INSERT INTO staff (email, department_id, role_id) VALUES (?, ?, ?)`,
+      [email, departmentId, roleId],
+    );
 
     return res.status(201).json({
-      staffId,
-      message: "Staff account created.",
+      staffId: result.insertId,
+      message: "Staff account created. User can sign in with Microsoft SSO.",
     });
   } catch (err) {
     console.error("Create staff error:", err);
@@ -383,7 +307,7 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      `UPDATE staff SET ${sets.join(", ")} WHERE staff_id = ?`,
+      `UPDATE staff SET ${sets.join(", ")} WHERE id = ?`,
       params,
     );
 
@@ -392,22 +316,22 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
     }
 
     const [rows] = await pool.execute(
-      `SELECT s.staff_id, s.full_name, s.email_address, s.phone_number, s.department_id,
+      `SELECT s.id, s.entra_id, s.email, s.department_id,
               d.department_name, s.role_id, r.role_name
        FROM staff s
        INNER JOIN role_table r ON r.role_id = s.role_id
        INNER JOIN department_table d ON d.department_id = s.department_id
-       WHERE s.staff_id = ?
+       WHERE s.id = ?
        LIMIT 1`,
       [staffId],
     );
 
     const row = rows[0];
     return res.json({
-      staffId: row.staff_id,
-      fullName: row.full_name,
-      email: row.email_address,
-      phoneNumber: row.phone_number,
+      staffId: row.id,
+      fullName: displayNameFromEmail(row.email),
+      email: row.email,
+      entraId: row.entra_id,
       departmentId: row.department_id,
       departmentName: row.department_name,
       roleId: row.role_id,
@@ -441,7 +365,7 @@ apiRouter.use((req, res) => {
     path: req.originalUrl,
     apiBuild: API_BUILD,
     hint:
-      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 6.",
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 7.",
   });
 });
 
@@ -462,7 +386,7 @@ app.use((req, res) => {
       path: req.originalUrl,
       apiBuild: API_BUILD,
       hint:
-        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 6.",
+        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 7.",
     });
   }
   res.status(404).type("text").send("Not found");

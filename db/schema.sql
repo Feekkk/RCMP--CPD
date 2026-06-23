@@ -70,29 +70,24 @@ INSERT INTO department_table (department_id, department_name) VALUES
 ON DUPLICATE KEY UPDATE department_name = VALUES(department_name);
 
 CREATE TABLE IF NOT EXISTS staff (
-    staff_id INT PRIMARY KEY AUTO_INCREMENT,
-    full_name VARCHAR(255) NOT NULL,
-    email_address VARCHAR(255) NOT NULL,
-    phone_number VARCHAR(20) NOT NULL,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    entra_id VARCHAR(36) NULL,
+    email VARCHAR(255) NOT NULL,
     department_id INT NOT NULL,
     role_id INT NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_staff_email (email),
     CONSTRAINT fk_staff_role FOREIGN KEY (role_id) REFERENCES role_table (role_id),
     CONSTRAINT fk_staff_department FOREIGN KEY (department_id) REFERENCES department_table (department_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- Demo password for all seeded users: RCMP1234 (bcrypt cost 10)
-INSERT INTO staff (staff_id, full_name, email_address, phone_number, department_id, role_id, password_hash) VALUES
-(620000, 'Wan Afiq', 'afiq.danial@unikl.edu.my', '0134567890', 16, 1, '$2b$10$lfoXnFtySP1kYHYFtQmqgeIJpjO/JeDh0ngrn5hA9YeHfKfSY6s5u'),
-(620001, 'Marina Abd Kadir', 'marinaak@unikl.edu.my', '0134567890', 13, 2, '$2b$10$lfoXnFtySP1kYHYFtQmqgeIJpjO/JeDh0ngrn5hA9YeHfKfSY6s5u'),
-(610002, 'Tun Hazman', 'tun.hazman@unikl.edu.my', '0134567890', 16, 3, '$2b$10$lfoXnFtySP1kYHYFtQmqgeIJpjO/JeDh0ngrn5hA9YeHfKfSY6s5u'),
-(620003, 'Hisshamuddin', 'hisshamuddin@unikl.edu.my', '0134567890', 34, 4, '$2b$10$lfoXnFtySP1kYHYFtQmqgeIJpjO/JeDh0ngrn5hA9YeHfKfSY6s5u')
+INSERT INTO staff (id, email, department_id, role_id) VALUES
+(1, 'afiq.danial@unikl.edu.my', 16, 1),
+(2, 'marinaak@unikl.edu.my', 13, 2),
+(3, 'tun.hazman@unikl.edu.my', 16, 3),
+(4, 'hisshamuddin@unikl.edu.my', 34, 4)
 ON DUPLICATE KEY UPDATE
-    full_name = VALUES(full_name),
-    email_address = VALUES(email_address),
-    phone_number = VALUES(phone_number),
+    email = VALUES(email),
     department_id = VALUES(department_id),
-    role_id = VALUES(role_id),
-    password_hash = VALUES(password_hash);
+    role_id = VALUES(role_id);

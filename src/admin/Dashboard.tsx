@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, FileText, LayoutDashboard, TrendingUp, Users } from "lucide-react";
 
+import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,127 +73,131 @@ export const AdminDashboardPage = () => {
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Approvals overview</CardTitle>
-                <CardDescription>Monitor approvals performance for the month.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Approval rate</p>
-                    <p className="font-display text-3xl font-bold">
-                      {approvalRate}% <span className="text-muted-foreground">/ 100%</span>
-                    </p>
+            <div className="lg:col-span-2 grid gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Approvals overview</CardTitle>
+                  <CardDescription>Monitor approvals performance for the month.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Approval rate</p>
+                      <p className="font-display text-3xl font-bold">
+                        {approvalRate}% <span className="text-muted-foreground">/ 100%</span>
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="h-6">
+                      {approvedThisMonth}/{totalThisMonth} approved
+                    </Badge>
                   </div>
-                  <Badge variant="secondary" className="h-6">
-                    {approvedThisMonth}/{totalThisMonth} approved
-                  </Badge>
-                </div>
-                <Progress value={approvalRate} />
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pending</p>
-                    <p className="mt-2 text-lg font-semibold">{pendingApprovals}</p>
+                  <Progress value={approvalRate} />
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border bg-card p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pending</p>
+                      <p className="mt-2 text-lg font-semibold">{pendingApprovals}</p>
+                    </div>
+                    <div className="rounded-xl border bg-card p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Approved</p>
+                      <p className="mt-2 text-lg font-semibold">{approvedThisMonth}</p>
+                    </div>
+                    <div className="rounded-xl border bg-card p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Rejected</p>
+                      <p className="mt-2 text-lg font-semibold">{rejectedThisMonth}</p>
+                    </div>
                   </div>
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Approved</p>
-                    <p className="mt-2 text-lg font-semibold">{approvedThisMonth}</p>
-                  </div>
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Rejected</p>
-                    <p className="mt-2 text-lg font-semibold">{rejectedThisMonth}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick actions</CardTitle>
-                <CardDescription>Admin shortcuts for daily review.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <Button variant="outline" className="w-full justify-start">
-                  <LayoutDashboard className="h-4 w-4" />
-                  View dashboard
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <FileText className="h-4 w-4" />
-                  Pending requisitions
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Users className="h-4 w-4" />
-                  User management
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent submissions</CardTitle>
-                <CardDescription>Latest requisitions submitted by staff.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[120px]">ID</TableHead>
-                        <TableHead>Programme</TableHead>
-                        <TableHead className="hidden md:table-cell">Staff</TableHead>
-                        <TableHead className="hidden md:table-cell">Submitted</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recent.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell className="font-medium">{row.id}</TableCell>
-                          <TableCell>
-                            <div className="grid gap-1">
-                              <p className="font-medium leading-none">{row.title}</p>
-                              <p className="text-sm text-muted-foreground md:hidden">{row.staff}</p>
-                              <p className="text-sm text-muted-foreground md:hidden">Submitted: {row.submittedAt}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">{row.staff}</TableCell>
-                          <TableCell className="hidden md:table-cell">{row.submittedAt}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              variant={
-                                row.status === "approved"
-                                  ? "default"
-                                  : row.status === "rejected"
-                                    ? "destructive"
-                                    : row.status === "pending"
-                                      ? "outline"
-                                      : "secondary"
-                              }
-                              className={
-                                row.status === "pending"
-                                  ? "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
-                                  : undefined
-                              }
-                            >
-                              {row.status === "submitted"
-                                ? "Submitted"
-                                : row.status === "pending"
-                                  ? "Pending"
-                                  : row.status === "approved"
-                                    ? "Approved"
-                                    : "Rejected"}
-                            </Badge>
-                          </TableCell>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent submissions</CardTitle>
+                  <CardDescription>Latest requisitions submitted by staff.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[120px]">ID</TableHead>
+                          <TableHead>Programme</TableHead>
+                          <TableHead className="hidden md:table-cell">Staff</TableHead>
+                          <TableHead className="hidden md:table-cell">Submitted</TableHead>
+                          <TableHead className="text-right">Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {recent.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell className="font-medium">{row.id}</TableCell>
+                            <TableCell>
+                              <div className="grid gap-1">
+                                <p className="font-medium leading-none">{row.title}</p>
+                                <p className="text-sm text-muted-foreground md:hidden">{row.staff}</p>
+                                <p className="text-sm text-muted-foreground md:hidden">Submitted: {row.submittedAt}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">{row.staff}</TableCell>
+                            <TableCell className="hidden md:table-cell">{row.submittedAt}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge
+                                variant={
+                                  row.status === "approved"
+                                    ? "default"
+                                    : row.status === "rejected"
+                                      ? "destructive"
+                                      : row.status === "pending"
+                                        ? "outline"
+                                        : "secondary"
+                                }
+                                className={
+                                  row.status === "pending"
+                                    ? "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
+                                    : undefined
+                                }
+                              >
+                                {row.status === "submitted"
+                                  ? "Submitted"
+                                  : row.status === "pending"
+                                    ? "Pending"
+                                    : row.status === "approved"
+                                      ? "Approved"
+                                      : "Rejected"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick actions</CardTitle>
+                  <CardDescription>Admin shortcuts for daily review.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <Button variant="outline" className="w-full justify-start">
+                    <LayoutDashboard className="h-4 w-4" />
+                    View dashboard
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <FileText className="h-4 w-4" />
+                    Pending requisitions
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start">
+                    <Users className="h-4 w-4" />
+                    User management
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <RequisitionPolicyCard />
+            </div>
           </div>
         </div>
       </div>

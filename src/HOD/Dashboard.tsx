@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Award, CheckCircle2, ClipboardList, Clock, FileText, Users } from "lucide-react";
 
+import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,11 +114,12 @@ export const HODDashboardPage = () => {
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Department Performance</CardTitle>
-                <CardDescription>Track endorsements and outcomes for your department this month.</CardDescription>
-              </CardHeader>
+            <div className="lg:col-span-2 grid gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Department Performance</CardTitle>
+                  <CardDescription>Track endorsements and outcomes for your department this month.</CardDescription>
+                </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="flex items-end justify-between gap-4">
                   <div>
@@ -146,46 +148,9 @@ export const HODDashboardPage = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award className="h-5 w-5 text-primary" />
-                  My progress
-                </CardTitle>
-                <CardDescription>Your CPD hours toward the annual requirement.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center gap-5">
-                <div className="relative flex items-center justify-center">
-                  <CircularProgress percent={myCpdPercent} />
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <p className="font-display text-3xl font-bold leading-none">{myCpdPercent}%</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {myCpdCompleted}h / {myCpdTarget}h
-                    </p>
-                  </div>
-                </div>
-                <div className="grid w-full gap-2 rounded-xl border bg-muted/30 p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Approved</span>
-                    <span className="font-medium">10h</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Pending</span>
-                    <span className="font-medium">4h</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Remaining</span>
-                    <span className="font-medium">{myCpdTarget - myCpdCompleted}h</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-6">
-            <Card>
+              <Card>
               <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
                 <div>
                   <CardTitle>Review queue preview</CardTitle>
@@ -252,7 +217,47 @@ export const HODDashboardPage = () => {
                   </Table>
                 </div>
               </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  My progress
+                </CardTitle>
+                <CardDescription>Your CPD hours toward the annual requirement.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center gap-5">
+                <div className="relative flex items-center justify-center">
+                  <CircularProgress percent={myCpdPercent} />
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <p className="font-display text-3xl font-bold leading-none">{myCpdPercent}%</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {myCpdCompleted}h / {myCpdTarget}h
+                    </p>
+                  </div>
+                </div>
+                <div className="grid w-full gap-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Approved</span>
+                    <span className="font-medium">10h</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Pending</span>
+                    <span className="font-medium">4h</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Remaining</span>
+                    <span className="font-medium">{myCpdTarget - myCpdCompleted}h</span>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
+
+            <RequisitionPolicyCard />
+            </div>
           </div>
         </div>
       </div>

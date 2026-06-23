@@ -1,6 +1,7 @@
 import * as React from "react";
 import { FileText, Plus, Trash2 } from "lucide-react";
 
+import { ProgrammeDatePolicyAlert } from "@/components/cpd/ProgrammeDatePolicyAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -190,6 +191,7 @@ export function HODRequisitionsPage() {
                                   )
                                 }
                               />
+                              <ProgrammeDatePolicyAlert programmeDate={slot.date} />
                             </div>
                             <div className="grid gap-2 md:col-span-3">
                               <Label htmlFor={`slotFrom-${idx}`}>From</Label>

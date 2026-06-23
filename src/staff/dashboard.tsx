@@ -1,17 +1,13 @@
 import { Award, CalendarCheck, CheckCircle2, Clock, FileText, TrendingUp } from "lucide-react";
 
+import { CpdProgressOverviewCard, STAFF_PROGRESS_MOCK } from "@/components/cpd/CpdProgressOverviewCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export const StaffDashboardPage = () => {
-  const completed = 18;
-  const target = 40;
-  const percent = Math.round((completed / target) * 100);
-
   const stats = [
     { label: "CPD target", value: "40h", icon: Award },
     { label: "Completed", value: "18h", icon: CheckCircle2 },
@@ -69,40 +65,10 @@ export const StaffDashboardPage = () => {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 grid gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Progress overview</CardTitle>
-                  <CardDescription>Stay on track toward the 40-hour annual requirement.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Completed</p>
-                      <p className="font-display text-3xl font-bold">
-                        {completed}h <span className="text-muted-foreground">/ {target}h</span>
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="h-6">
-                      {percent}%
-                    </Badge>
-                  </div>
-                  <Progress value={percent} />
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Approved</p>
-                      <p className="mt-2 text-lg font-semibold">12h</p>
-                    </div>
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pending</p>
-                      <p className="mt-2 text-lg font-semibold">6h</p>
-                    </div>
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Rejected</p>
-                      <p className="mt-2 text-lg font-semibold">0h</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <CpdProgressOverviewCard
+                description="Stay on track toward the 40-hour annual requirement."
+                data={STAFF_PROGRESS_MOCK}
+              />
 
               <Card>
                 <CardHeader>

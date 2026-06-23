@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import { Award, CheckCircle2, ClipboardList, Clock, FileText, Users } from "lucide-react";
 
+import { CpdProgressOverviewCard, HOD_PROGRESS_MOCK } from "@/components/cpd/CpdProgressOverviewCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HODSidebar } from "@/HOD/Sidebar";
 
@@ -42,19 +42,15 @@ function CircularProgress({ percent, size = 128, stroke = 10 }: { percent: numbe
 
 export const HODDashboardPage = () => {
   const reviewQueue = 5;
-  const pendingDept = 3;
   const approvedMonth = 11;
   const teamMembers = 24;
-  const reviewedTotal = reviewQueue + approvedMonth + 2;
-  const clearanceRate = reviewedTotal ? Math.round((approvedMonth / reviewedTotal) * 100) : 0;
-
   const myCpdCompleted = 14;
   const myCpdTarget = 40;
   const myCpdPercent = myCpdTarget ? Math.round((myCpdCompleted / myCpdTarget) * 100) : 0;
 
   const stats = [
     { label: "Review queue", value: `${reviewQueue}`, icon: ClipboardList },
-    { label: "Dept. pending", value: `${pendingDept}`, icon: Clock },
+    { label: "Dept. pending", value: "3", icon: Clock },
     { label: "Approved (month)", value: `${approvedMonth}`, icon: CheckCircle2 },
     { label: "Team members", value: `${teamMembers}`, icon: Users },
   ] as const;
@@ -115,40 +111,11 @@ export const HODDashboardPage = () => {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 grid gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Department Performance</CardTitle>
-                  <CardDescription>Track endorsements and outcomes for your department this month.</CardDescription>
-                </CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Clearance rate</p>
-                    <p className="font-display text-3xl font-bold">
-                      {clearanceRate}% <span className="text-muted-foreground">/ 100%</span>
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="h-6">
-                    {approvedMonth} approved · {reviewQueue} in queue
-                  </Badge>
-                </div>
-                <Progress value={clearanceRate} />
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">In queue</p>
-                    <p className="mt-2 text-lg font-semibold">{reviewQueue}</p>
-                  </div>
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Approved</p>
-                    <p className="mt-2 text-lg font-semibold">{approvedMonth}</p>
-                  </div>
-                  <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Returned</p>
-                    <p className="mt-2 text-lg font-semibold">2</p>
-                  </div>
-                </div>
-              </CardContent>
-              </Card>
+              <CpdProgressOverviewCard
+                description="Track endorsements and outcomes for your department this month."
+                data={HOD_PROGRESS_MOCK}
+                monthlyLabel="Monthly endorsements"
+              />
 
               <Card>
               <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">

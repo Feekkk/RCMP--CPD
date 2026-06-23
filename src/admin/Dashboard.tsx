@@ -1,24 +1,18 @@
 import { CheckCircle2, Clock, FileText, LayoutDashboard, TrendingUp, Users } from "lucide-react";
 
+import { ADMIN_PROGRESS_MOCK, CpdProgressOverviewCard } from "@/components/cpd/CpdProgressOverviewCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminSidebar } from "@/admin/Sidebar";
 
 export const AdminDashboardPage = () => {
-  const pendingApprovals = 7;
-  const approvedThisMonth = 14;
-  const rejectedThisMonth = 2;
-  const totalThisMonth = pendingApprovals + approvedThisMonth + rejectedThisMonth;
-  const approvalRate = totalThisMonth ? Math.round((approvedThisMonth / totalThisMonth) * 100) : 0;
-
   const stats = [
-    { label: "Pending approvals", value: `${pendingApprovals}`, icon: Clock },
-    { label: "Approved (month)", value: `${approvedThisMonth}`, icon: CheckCircle2 },
-    { label: "Rejected (month)", value: `${rejectedThisMonth}`, icon: TrendingUp },
+    { label: "Pending approvals", value: "7", icon: Clock },
+    { label: "Approved (month)", value: "14", icon: CheckCircle2 },
+    { label: "Rejected (month)", value: "2", icon: TrendingUp },
     { label: "Active staff", value: "193", icon: Users },
   ] as const;
 
@@ -74,40 +68,11 @@ export const AdminDashboardPage = () => {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 grid gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Approvals overview</CardTitle>
-                  <CardDescription>Monitor approvals performance for the month.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Approval rate</p>
-                      <p className="font-display text-3xl font-bold">
-                        {approvalRate}% <span className="text-muted-foreground">/ 100%</span>
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="h-6">
-                      {approvedThisMonth}/{totalThisMonth} approved
-                    </Badge>
-                  </div>
-                  <Progress value={approvalRate} />
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pending</p>
-                      <p className="mt-2 text-lg font-semibold">{pendingApprovals}</p>
-                    </div>
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Approved</p>
-                      <p className="mt-2 text-lg font-semibold">{approvedThisMonth}</p>
-                    </div>
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Rejected</p>
-                      <p className="mt-2 text-lg font-semibold">{rejectedThisMonth}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <CpdProgressOverviewCard
+                description="Monitor approvals performance for the month."
+                data={ADMIN_PROGRESS_MOCK}
+                monthlyLabel="Monthly approvals"
+              />
 
               <Card>
                 <CardHeader>

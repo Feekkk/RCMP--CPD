@@ -1,7 +1,7 @@
 import * as React from "react";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText } from "lucide-react";
 
-import { ProgrammeDatePolicyAlert } from "@/components/cpd/ProgrammeDatePolicyAlert";
+import { ProgrammeScheduleFields, type ProgrammeSlot } from "@/components/cpd/ProgrammeScheduleFields";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,12 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { StaffSidebar } from "@/staff/Sidebar";
-
-type ProgrammeSlot = {
-  date: string;
-  from: string;
-  to: string;
-};
 
 export function Requisition() {
   const [category, setCategory] = React.useState<string>("");
@@ -164,78 +158,8 @@ export function Requisition() {
                         />
                       </div>
 
-                      <div className="md:col-span-2 grid gap-3">
-                        <div className="flex items-center justify-between gap-4">
-                          <Label>Schedule (date + hour to hour)</Label>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setProgrammeSlots((prev) => [...prev, { date: "", from: "", to: "" }])}
-                          >
-                            <Plus className="h-4 w-4" />
-                            Add
-                          </Button>
-                        </div>
-
-                        <div className="grid gap-3">
-                          {programmeSlots.map((slot, idx) => (
-                            <div key={idx} className="grid gap-3 rounded-lg border p-3 md:grid-cols-12">
-                              <div className="grid gap-2 md:col-span-4">
-                                <Label htmlFor={`slotDate-${idx}`}>Date</Label>
-                                <Input
-                                  id={`slotDate-${idx}`}
-                                  type="date"
-                                  value={slot.date}
-                                  onChange={(e) =>
-                                    setProgrammeSlots((prev) =>
-                                      prev.map((s, i) => (i === idx ? { ...s, date: e.target.value } : s)),
-                                    )
-                                  }
-                                />
-                                <ProgrammeDatePolicyAlert programmeDate={slot.date} />
-                              </div>
-                              <div className="grid gap-2 md:col-span-3">
-                                <Label htmlFor={`slotFrom-${idx}`}>From</Label>
-                                <Input
-                                  id={`slotFrom-${idx}`}
-                                  type="time"
-                                  value={slot.from}
-                                  onChange={(e) =>
-                                    setProgrammeSlots((prev) =>
-                                      prev.map((s, i) => (i === idx ? { ...s, from: e.target.value } : s)),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2 md:col-span-3">
-                                <Label htmlFor={`slotTo-${idx}`}>To</Label>
-                                <Input
-                                  id={`slotTo-${idx}`}
-                                  type="time"
-                                  value={slot.to}
-                                  onChange={(e) =>
-                                    setProgrammeSlots((prev) =>
-                                      prev.map((s, i) => (i === idx ? { ...s, to: e.target.value } : s)),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="flex items-end md:col-span-2">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="w-full text-muted-foreground hover:text-foreground"
-                                  disabled={programmeSlots.length === 1}
-                                  onClick={() => setProgrammeSlots((prev) => prev.filter((_, i) => i !== idx))}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="ml-2 md:sr-only">Remove</span>
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="md:col-span-2">
+                        <ProgrammeScheduleFields slots={programmeSlots} onChange={setProgrammeSlots} />
                       </div>
 
                       <div className="grid gap-2 md:col-span-2">

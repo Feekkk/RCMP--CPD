@@ -53,6 +53,54 @@ export function evaluateRequisitionDatePolicy(programmeDateStr: string): Requisi
   };
 }
 
+export type SchedulePolicySummary = {
+  hasDates: boolean;
+  isUrgent: boolean;
+  message: string;
+  policies: RequisitionDatePolicy[];
+};
+
+export function getSchedulePolicySummary(programmeDates: string[]): SchedulePolicySummary | null {
+  const policies = programmeDates
+    .map((date) => evaluateRequisitionDatePolicy(date))
+    .filter((policy): policy is RequisitionDatePolicy => policy !== null);
+
+  if (policies.length === 0) return null;
+
+  const urgentPolicies = policies.filter((policy) => policy.isUrgent);
+  const isUrgent = urgentPolicies.length > 0;
+
+  if (policies.length === 1) {
+    const [only] = policies;
+    return {
+      hasDates: true,
+      isUrgent: only.isUrgent,
+      message: only.message,
+      policies,
+    };
+  }
+
+  if (isUrgent) {
+    const urgentCount = urgentPolicies.length;
+    return {
+      hasDates: true,
+      isUrgent: true,
+      message:
+        urgentCount === policies.length
+          ? `All ${urgentCount} programme dates are within ${REQUISITION_LEAD_TIME_MONTHS} months. Your requisition will be flagged as urgent and requires approval by the Dean or HR.`
+          : `${urgentCount} of ${policies.length} programme dates are within ${REQUISITION_LEAD_TIME_MONTHS} months. Urgent dates require approval by the Dean or HR.`,
+      policies,
+    };
+  }
+
+  return {
+    hasDates: true,
+    isUrgent: false,
+    message: `All ${policies.length} programme dates meet the submission policy (submit at least ${REQUISITION_LEAD_TIME_MONTHS} months in advance).`,
+    policies,
+  };
+}
+
 export const REQUISITION_POLICY_RULES = [
   {
     title: "Advance submission",

@@ -103,7 +103,7 @@ export function AdminHistoryPage() {
               </Tabs>
 
               <div className="rounded-lg border">
-                <Table>d
+                <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[120px]">ID</TableHead>

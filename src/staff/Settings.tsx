@@ -65,7 +65,7 @@ export function Settings() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <StaffSidebar />
-      <div className="min-w-0 md:pl-72">
+      <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
         <div className="container mx-auto py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">

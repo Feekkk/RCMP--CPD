@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, FileText, History, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
+import { BarChart3, FileText, History, LayoutDashboard, LogOut, Menu, Settings, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
@@ -14,12 +16,10 @@ const menuItems = [
 
 const userItems = [{ to: "/admin/users", label: "User", icon: Users }] as const;
 
-export function AdminSidebar() {
+function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate();
-
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 border-r bg-background md:block">
-      <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b px-6 py-5">
           <img src="/unikl-rcmp.png" alt="logo" width={40} height={40} className="h-18 w-20 object-contain" />
           <div className="leading-tight">
@@ -35,6 +35,7 @@ export function AdminSidebar() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
@@ -54,6 +55,7 @@ export function AdminSidebar() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
@@ -72,14 +74,44 @@ export function AdminSidebar() {
           <Button
             variant="ghost"
             className="w-full justify-start text-muted-foreground hover:text-foreground"
-            onClick={() => navigate("/login")}
+            onClick={() => {
+              onNavigate?.();
+              navigate("/login");
+            }}
           >
             <LogOut className="h-4 w-4" />
             Logout
           </Button>
         </div>
+    </div>
+  );
+}
+
+export function AdminSidebar() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-72 border-r bg-background md:block">
+        <SidebarBody />
+      </aside>
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-background/95 px-3 backdrop-blur md:hidden">
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Open menu">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <SidebarBody onNavigate={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
+        <div className="flex items-center gap-2">
+          <img src="/unikl-rcmp.png" alt="logo" className="h-9 w-9 object-contain" />
+          <p className="font-display text-sm font-bold">CPD Portal</p>
+        </div>
+        <div className="w-9" />
       </div>
-    </aside>
+    </>
   );
 }
 

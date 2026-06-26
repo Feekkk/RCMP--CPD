@@ -121,7 +121,7 @@ export function HODReviewQueuePage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <HODSidebar />
-      <div className="min-w-0 md:pl-72">
+      <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
         <div className="container mx-auto py-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">

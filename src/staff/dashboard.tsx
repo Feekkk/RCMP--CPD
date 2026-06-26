@@ -25,8 +25,8 @@ export const StaffDashboardPage = () => {
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <StaffSidebar />
 
-      <div className="min-w-0 md:pl-72">
-        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
+      <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
+        <header className="sticky top-14 z-10 md:top-0 border-b bg-background/80 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>

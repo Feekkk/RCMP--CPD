@@ -2,9 +2,9 @@ import * as React from "react";
 import { FileText } from "lucide-react";
 
 import { ProgrammeScheduleFields, type ProgrammeSlot } from "@/components/cpd/ProgrammeScheduleFields";
+import { FundingClaimFields, type FundingClaim } from "@/components/cpd/FundingClaimFields";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,7 +20,7 @@ export function AdminRequisitionsPage() {
   const [programmeSlots, setProgrammeSlots] = React.useState<ProgrammeSlot[]>([{ date: "", from: "", to: "" }]);
   const [programmeVenue, setProgrammeVenue] = React.useState<string>("");
   const [programmeFees, setProgrammeFees] = React.useState<string>("");
-  const [hrdcClaimable, setHrdcClaimable] = React.useState<boolean>(false);
+  const [fundingClaim, setFundingClaim] = React.useState<FundingClaim>("");
 
   const [organiserName, setOrganiserName] = React.useState<string>("");
   const [organiserAddress, setOrganiserAddress] = React.useState<string>("");
@@ -28,7 +28,6 @@ export function AdminRequisitionsPage() {
   const [organiserEmail, setOrganiserEmail] = React.useState<string>("");
   const [organiserContactPerson, setOrganiserContactPerson] = React.useState<string>("");
 
-  const [budgetFees, setBudgetFees] = React.useState<string>("");
   const [budgetMileage, setBudgetMileage] = React.useState<string>("");
   const [budgetAccommodation, setBudgetAccommodation] = React.useState<string>("");
   const [budgetTravelFare, setBudgetTravelFare] = React.useState<string>("");
@@ -42,8 +41,8 @@ export function AdminRequisitionsPage() {
       return Number.isFinite(parsed) ? parsed : 0;
     };
 
-    return n(budgetFees) + n(budgetMileage) + n(budgetAccommodation) + n(budgetTravelFare) + n(budgetOthers);
-  }, [budgetAccommodation, budgetFees, budgetMileage, budgetOthers, budgetTravelFare]);
+    return n(budgetMileage) + n(budgetAccommodation) + n(budgetTravelFare) + n(budgetOthers);
+  }, [budgetAccommodation, budgetMileage, budgetOthers, budgetTravelFare]);
 
   const resetForm = () => {
     setCategory("");
@@ -52,13 +51,12 @@ export function AdminRequisitionsPage() {
     setProgrammeSlots([{ date: "", from: "", to: "" }]);
     setProgrammeVenue("");
     setProgrammeFees("");
-    setHrdcClaimable(false);
+    setFundingClaim("");
     setOrganiserName("");
     setOrganiserAddress("");
     setOrganiserPhone("");
     setOrganiserEmail("");
     setOrganiserContactPerson("");
-    setBudgetFees("");
     setBudgetMileage("");
     setBudgetAccommodation("");
     setBudgetTravelFare("");
@@ -84,8 +82,8 @@ export function AdminRequisitionsPage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>CPD Requisition Form</CardTitle>
-              <CardDescription>Fill in the details below to submit a CPD requisition.</CardDescription>
+              <CardTitle>Requisition Form</CardTitle>
+              <CardDescription>Fill in the details below to submit your requisition.</CardDescription>
             </CardHeader>
             <CardContent>
               <form
@@ -108,10 +106,7 @@ export function AdminRequisitionsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="training">Training / Course</SelectItem>
-                        <SelectItem value="seminar">Seminar</SelectItem>
-                        <SelectItem value="conference">Conference</SelectItem>
                         <SelectItem value="workshop">Workshop</SelectItem>
-                        <SelectItem value="certification">Certification</SelectItem>
                         <SelectItem value="others">Others</SelectItem>
                       </SelectContent>
                     </Select>
@@ -170,26 +165,12 @@ export function AdminRequisitionsPage() {
                       />
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label htmlFor="programmeFees">Fees</Label>
-                      <Input
-                        id="programmeFees"
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step="0.01"
-                        placeholder="0.00"
-                        value={programmeFees}
-                        onChange={(e) => setProgrammeFees(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex items-end">
-                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox checked={hrdcClaimable} onCheckedChange={(v) => setHrdcClaimable(Boolean(v))} />
-                        HRDC claimable
-                      </label>
-                    </div>
+                    <FundingClaimFields
+                      fundingClaim={fundingClaim}
+                      onFundingClaimChange={setFundingClaim}
+                      programmeFees={programmeFees}
+                      onProgrammeFeesChange={setProgrammeFees}
+                    />
                   </div>
                 </section>
 
@@ -260,24 +241,11 @@ export function AdminRequisitionsPage() {
 
                 <section className="grid gap-4">
                   <div className="space-y-1">
-                    <h2 className="text-sm font-semibold tracking-tight">5. Request budget (optional)</h2>
+                    <h2 className="text-sm font-semibold tracking-tight">5. Budget Allocation</h2>
                     <p className="text-sm text-muted-foreground">Leave blank if not applicable.</p>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="budgetFees">Fees</Label>
-                      <Input
-                        id="budgetFees"
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step="0.01"
-                        placeholder="0.00"
-                        value={budgetFees}
-                        onChange={(e) => setBudgetFees(e.target.value)}
-                      />
-                    </div>
                     <div className="grid gap-2">
                       <Label htmlFor="budgetMileage">Mileage</Label>
                       <Input
@@ -344,12 +312,12 @@ export function AdminRequisitionsPage() {
 
                 <section className="grid gap-4">
                   <div className="space-y-1">
-                    <h2 className="text-sm font-semibold tracking-tight">6. Upload document (evidence)</h2>
-                    <p className="text-sm text-muted-foreground">Upload supporting documents (optional).</p>
+                    <h2 className="text-sm font-semibold tracking-tight">6. Upload Documents</h2>
+                    <p className="text-sm text-muted-foreground">Upload supporting and evidence related documents.</p>
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="evidenceFiles">Documents</Label>
+                    <Label htmlFor="evidenceFiles">Evidence documents</Label>
                     <Input
                       id="evidenceFiles"
                       type="file"

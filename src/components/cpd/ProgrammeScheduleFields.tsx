@@ -66,7 +66,7 @@ export function ProgrammeScheduleFields({ slots, onChange }: ProgrammeScheduleFi
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-4">
-        <Label>Schedule (date + hour to hour)</Label>
+        <Label>Programme schedule</Label>
         <Button
           type="button"
           variant="secondary"

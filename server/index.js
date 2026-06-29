@@ -7,7 +7,9 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { createSessionMiddleware } from "./auth/session.js";
+import { isDevLoginEnabled, registerDevAuthRoutes } from "./auth/dev.js";
 import { isMicrosoftSsoConfigured, registerMicrosoftAuthRoutes } from "./auth/microsoft.js";
+import { registerRequisitionRoutes } from "./requisitions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distPath = path.join(__dirname, "..", "dist");
@@ -74,7 +76,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 7;
+const API_BUILD = 9;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {
@@ -162,18 +164,23 @@ apiRouter.get("/ping", (_req, res) => {
     features: {
       usersByDepartment: true,
       staffCrud: true,
+      requisitions: true,
       microsoftSso: isMicrosoftSsoConfigured(),
+      devLogin: isDevLoginEnabled(),
     },
     authRoutes: [
       "/api/auth/microsoft",
       "/api/auth/microsoft/callback",
       "/api/auth/entra/profile",
       "/api/auth/me",
+      ...(isDevLoginEnabled() ? ["/api/auth/dev/accounts", "/api/auth/dev/login"] : []),
     ],
   });
 });
 
 registerMicrosoftAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
+registerDevAuthRoutes(apiRouter, { pool, dashboardPathForRole, loginLimiter });
+registerRequisitionRoutes(apiRouter, { pool, generalLimiter });
 
 async function handleUsersByDepartment(_req, res) {
   try {
@@ -365,7 +372,7 @@ apiRouter.use((req, res) => {
     path: req.originalUrl,
     apiBuild: API_BUILD,
     hint:
-      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 7.",
+      "Restart the Node API (npm run server). Local dev: use npm run dev:full. Verify GET /api/ping returns apiBuild 8.",
   });
 });
 
@@ -386,7 +393,7 @@ app.use((req, res) => {
       path: req.originalUrl,
       apiBuild: API_BUILD,
       hint:
-        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 7.",
+        "Deploy the latest server code (including server/auth/), run npm install, restart Node on Plesk, then check GET /api/ping for apiBuild 8.",
     });
   }
   res.status(404).type("text").send("Not found");

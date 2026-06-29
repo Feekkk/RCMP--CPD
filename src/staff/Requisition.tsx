@@ -1,5 +1,6 @@
 import * as React from "react";
-import { FileText } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { ProgrammeScheduleFields, type ProgrammeSlot } from "@/components/cpd/ProgrammeScheduleFields";
 import { FundingClaimFields, type FundingClaim } from "@/components/cpd/FundingClaimFields";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { createRequisition, type RequisitionFormData } from "@/lib/requisitionsApi";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export function Requisition() {
@@ -35,19 +37,27 @@ export function Requisition() {
   const [budgetOthers, setBudgetOthers] = React.useState<string>("");
 
   const [evidenceFiles, setEvidenceFiles] = React.useState<File[]>([]);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const totalBudget = React.useMemo(() => {
-    const n = (v: string) => {
-      const parsed = Number(v);
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-
-    return n(budgetFees) + n(budgetMileage) + n(budgetAccommodation) + n(budgetTravelFare) + n(budgetOthers);
-  }, [budgetAccommodation, budgetFees, budgetMileage, budgetOthers, budgetTravelFare]);
-
-  const saveAsDraft = () => {
-    console.log(category, justification, programmeTitle, programmeSlots, programmeVenue, programmeFees, fundingClaim, organiserName, organiserAddress, organiserPhone, organiserEmail, organiserContactPerson, budgetMileage, budgetAccommodation, budgetTravelFare, budgetOthers, evidenceFiles);
-  };
+  const buildFormData = (): RequisitionFormData => ({
+    category,
+    justification,
+    programmeTitle,
+    programmeSlots,
+    programmeVenue,
+    programmeFees,
+    fundingClaim,
+    organiserName,
+    organiserAddress,
+    organiserPhone,
+    organiserEmail,
+    organiserContactPerson,
+    budgetMileage,
+    budgetAccommodation,
+    budgetTravelFare,
+    budgetOthers,
+  });
 
   const resetForm = () => {
     setCategory("");
@@ -69,6 +79,43 @@ export function Requisition() {
     setBudgetOthers("");
     setEvidenceFiles([]);
   };
+
+  const saveRequisition = async (submitAs: "draft" | "submit") => {
+    const setBusy = submitAs === "submit" ? setIsSubmitting : setIsSaving;
+    setBusy(true);
+    try {
+      const result = await createRequisition(buildFormData(), evidenceFiles, submitAs);
+      toast.success(result.message);
+      if (submitAs === "submit") {
+        resetForm();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to save requisition.";
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAsDraft = () => {
+    void saveRequisition("draft");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void saveRequisition("submit");
+  };
+
+  const totalBudget = React.useMemo(() => {
+    const n = (v: string) => {
+      const parsed = Number(v);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    return n(budgetFees) + n(budgetMileage) + n(budgetAccommodation) + n(budgetTravelFare) + n(budgetOthers);
+  }, [budgetAccommodation, budgetFees, budgetMileage, budgetOthers, budgetTravelFare]);
+
+  const isBusy = isSaving || isSubmitting;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -92,12 +139,7 @@ export function Requisition() {
                 <CardDescription>Fill in the details below to submit your requisition.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form
-                  className="grid gap-6"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                  }}
-                >
+                <form className="grid gap-6" onSubmit={handleSubmit}>
                   <section className="grid gap-4">
                     <div className="flex items-center justify-between gap-4">
                       <div className="space-y-1">
@@ -349,10 +391,26 @@ export function Requisition() {
                   </section>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                    <Button type="button" variant="secondary" onClick={saveAsDraft}>
-                      Save as Draft
+                    <Button type="button" variant="secondary" onClick={saveAsDraft} disabled={isBusy}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        "Save as Draft"
+                      )}
                     </Button>
-                    <Button type="submit">Submit</Button>
+                    <Button type="submit" disabled={isBusy}>
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Submitting…
+                        </>
+                      ) : (
+                        "Submit"
+                      )}
+                    </Button>
                   </div>
                 </form>
               </CardContent>  

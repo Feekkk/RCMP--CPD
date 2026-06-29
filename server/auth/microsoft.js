@@ -92,7 +92,7 @@ async function getOidcConfig() {
   return oidcConfigPromise;
 }
 
-async function findStaffByEmail(pool, email) {
+export async function findStaffByEmail(pool, email) {
   const [rows] = await pool.execute(
     `SELECT s.id, s.entra_id, s.email, s.department_id,
             d.department_name, s.role_id, r.role_name
@@ -270,7 +270,7 @@ async function getEntraAccessToken(req) {
   return entra.accessToken;
 }
 
-export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {
+export function attachSessionUser(req, row, { microsoftProfile = null, authProvider = "microsoft" } = {}) {
   req.session.user = {
     staffId: row.id,
     fullName: microsoftProfile?.name ?? null,
@@ -280,8 +280,8 @@ export function attachSessionUser(req, row, { microsoftProfile = null } = {}) {
     departmentName: row.department_name,
     roleId: row.role_id,
     roleName: row.role_name,
-    authProvider: "microsoft",
-    microsoft: microsoftProfile,
+    authProvider,
+    microsoft: authProvider === "microsoft" ? microsoftProfile : null,
   };
 }
 

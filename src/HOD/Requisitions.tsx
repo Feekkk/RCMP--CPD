@@ -64,6 +64,10 @@ export function HODRequisitionsPage() {
     setEvidenceFiles([]);
   };
 
+  const saveAsDraft = () => {
+    console.log(category, justification, programmeTitle, programmeSlots, programmeVenue, programmeFees, fundingClaim, organiserName, organiserAddress, organiserPhone, organiserEmail, organiserContactPerson, budgetMileage, budgetAccommodation, budgetTravelFare, budgetOthers, evidenceFiles);
+  };
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <HODSidebar />
@@ -341,10 +345,10 @@ export function HODRequisitionsPage() {
                 </section>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <Button type="button" variant="secondary" onClick={resetForm}>
+                  <Button type="button" variant="secondary" onClick={saveAsDraft}>
                     Reset
                   </Button>
-                  <Button type="submit">Make Request</Button>
+                  <Button type="submit">Submit</Button>
                 </div>
               </form>
             </CardContent>

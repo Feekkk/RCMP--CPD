@@ -45,6 +45,10 @@ export function Requisition() {
     return n(budgetFees) + n(budgetMileage) + n(budgetAccommodation) + n(budgetTravelFare) + n(budgetOthers);
   }, [budgetAccommodation, budgetFees, budgetMileage, budgetOthers, budgetTravelFare]);
 
+  const saveAsDraft = () => {
+    console.log(category, justification, programmeTitle, programmeSlots, programmeVenue, programmeFees, fundingClaim, organiserName, organiserAddress, organiserPhone, organiserEmail, organiserContactPerson, budgetMileage, budgetAccommodation, budgetTravelFare, budgetOthers, evidenceFiles);
+  };
+
   const resetForm = () => {
     setCategory("");
     setJustification("");
@@ -109,7 +113,7 @@ export function Requisition() {
                           <SelectValue placeholder="Choose a category" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="training">Training / Course</SelectItem>
+                          <SelectItem value="training">Training</SelectItem>
                           <SelectItem value="workshop">Workshop</SelectItem>
                           <SelectItem value="others">Others</SelectItem>
                         </SelectContent>
@@ -345,13 +349,13 @@ export function Requisition() {
                   </section>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                    <Button type="button" variant="secondary" onClick={resetForm}>
-                      Reset
+                    <Button type="button" variant="secondary" onClick={saveAsDraft}>
+                      Save as Draft
                     </Button>
-                    <Button type="submit">Make Request</Button>
+                    <Button type="submit">Submit</Button>
                   </div>
                 </form>
-              </CardContent>
+              </CardContent>  
             </Card>
         </div>
       </div>

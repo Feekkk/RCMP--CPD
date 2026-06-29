@@ -64,6 +64,11 @@ export function AdminRequisitionsPage() {
     setEvidenceFiles([]);
   };
 
+  const saveAsDraft = () => {
+    console.log("save as draft");
+    console.log(category, justification, programmeTitle, programmeSlots, programmeVenue, programmeFees, fundingClaim, organiserName, organiserAddress, organiserPhone, organiserEmail, organiserContactPerson, budgetMileage, budgetAccommodation, budgetTravelFare, budgetOthers, evidenceFiles);
+  };
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <AdminSidebar />
@@ -341,10 +346,10 @@ export function AdminRequisitionsPage() {
                 </section>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <Button type="button" variant="secondary" onClick={resetForm}>
-                    Reset
+                  <Button type="button" variant="secondary" onClick={saveAsDraft}>
+                    Save as Draft
                   </Button>
-                  <Button type="submit">Make Request</Button>
+                  <Button type="submit">Submit</Button>
                 </div>
               </form>
             </CardContent>

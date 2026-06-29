@@ -1,52 +1,78 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  Clock,
+  FilePen,
+  FileText,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 
-import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
+import { RequisitionHistoryCard } from "@/components/cpd/RequisitionHistoryCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
-import { formatHistoryDate, type HistoryStatusFilter } from "@/lib/requisitionStatus";
+import {
+  type HistoryPhaseFilter,
+  phaseFilterTrafficLight,
+  TRAFFIC_LIGHT_STYLES,
+  workflowPhaseDescription,
+} from "@/lib/requisitionStatus";
+import { cn } from "@/lib/utils";
 
-const STATUS_TABS: { value: HistoryStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "submitted", label: "Submitted" },
-  { value: "pending", label: "Pending" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+const PHASE_TABS: {
+  value: HistoryPhaseFilter;
+  label: string;
+  summaryKey: keyof import("@/lib/requisitionsApi").RequisitionHistorySummary | "all";
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { value: "all", label: "All", summaryKey: "all", icon: FileText },
+  { value: "draft", label: "Drafts", summaryKey: "draft", icon: FilePen },
+  { value: "pre_training", label: "Pre-training", summaryKey: "preTraining", icon: Clock },
+  { value: "post_training", label: "Post-training", summaryKey: "postTraining", icon: ClipboardCheck },
+  { value: "completed", label: "Completed", summaryKey: "completed", icon: Award },
+  { value: "rejected", label: "Rejected", summaryKey: "rejected", icon: XCircle },
+];
+
+const LEGEND = [
+  { light: "green" as const, label: "Complete / approved" },
+  { light: "yellow" as const, label: "In progress / action needed" },
+  { light: "red" as const, label: "Rejected / blocked" },
 ];
 
 type RequisitionHistoryPanelProps = {
   description: string;
-  showStaffColumn?: boolean;
-  showBudgetColumn?: boolean;
-  showActions?: boolean;
+  showBudget?: boolean;
+  editPath?: string;
   pageSize?: number;
 };
 
 export function RequisitionHistoryPanel({
   description,
-  showStaffColumn = false,
-  showBudgetColumn = false,
-  showActions = false,
+  showBudget = false,
+  editPath = "/staff/requisition",
   pageSize = 10,
 }: RequisitionHistoryPanelProps) {
-  const [statusFilter, setStatusFilter] = React.useState<HistoryStatusFilter>("all");
+  const [phaseFilter, setPhaseFilter] = React.useState<HistoryPhaseFilter>("all");
   const [page, setPage] = React.useState(1);
   const paginated = pageSize < 100;
 
   React.useEffect(() => {
     setPage(1);
-  }, [statusFilter]);
+  }, [phaseFilter]);
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: ["requisitions", "history", statusFilter, page, pageSize],
+    queryKey: ["requisitions", "history", phaseFilter, page, pageSize],
     queryFn: () =>
       fetchRequisitionHistory({
-        status: statusFilter,
+        phase: phaseFilter,
         page,
         pageSize,
       }),
@@ -56,114 +82,149 @@ export function RequisitionHistoryPanel({
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 0;
   const safePage = data?.page ?? 1;
+  const summary = data?.summary;
+
+  const activePhaseHint =
+    phaseFilter !== "all" ? workflowPhaseDescription(phaseFilter as Exclude<HistoryPhaseFilter, "all">) : null;
+
+  const activeHintLight = phaseFilter !== "all" ? phaseFilterTrafficLight(phaseFilter) : "neutral";
+  const activeHintStyles = TRAFFIC_LIGHT_STYLES[activeHintLight];
 
   return (
-    <Card className="mt-6">
-      <CardHeader>
-        <CardTitle>Requisition history</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as HistoryStatusFilter)}>
-          <TabsList className="w-full justify-start">
-            {STATUS_TABS.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+    <div className="mt-6 grid gap-6">
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/20 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status key</p>
+        {LEGEND.map(({ light, label }) => (
+          <span key={light} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <span className={cn("h-2.5 w-2.5 rounded-full", TRAFFIC_LIGHT_STYLES[light].dot)} aria-hidden />
+            {label}
+          </span>
+        ))}
+      </div>
 
-        {isError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Unable to load history</AlertTitle>
-            <AlertDescription>{error instanceof Error ? error.message : "Try again later."}</AlertDescription>
-          </Alert>
-        ) : null}
+      {summary ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {PHASE_TABS.filter((t) => t.value !== "all").map((tab) => {
+            const count = summary[tab.summaryKey as keyof typeof summary] ?? 0;
+            const Icon = tab.icon;
+            const active = phaseFilter === tab.value;
+            const light = phaseFilterTrafficLight(tab.value);
+            const styles = TRAFFIC_LIGHT_STYLES[light];
 
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">ID</TableHead>
-                <TableHead>Programme</TableHead>
-                {showStaffColumn ? <TableHead className="hidden md:table-cell">Staff</TableHead> : null}
-                {!showStaffColumn && showBudgetColumn ? (
-                  <TableHead className="hidden md:table-cell">Category</TableHead>
-                ) : null}
-                <TableHead className="hidden md:table-cell">Submitted</TableHead>
-                {showBudgetColumn ? <TableHead className="text-right">Budget</TableHead> : null}
-                <TableHead className="text-right">Status</TableHead>
-                {showActions ? <TableHead className="w-[100px] text-right">Action</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={showActions ? 7 : showStaffColumn || showBudgetColumn ? 6 : 5} className="py-10 text-center">
-                    <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading requisitions…
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : rows.length ? (
-                rows.map((row) => (
-                  <TableRow key={row.requisitionId}>
-                    <TableCell className="font-medium">{row.id}</TableCell>
-                    <TableCell>
-                      <div className="grid gap-1">
-                        <p className="font-medium leading-none">{row.title || "Untitled"}</p>
-                        {showStaffColumn ? (
-                          <p className="text-sm text-muted-foreground md:hidden">{row.staffName}</p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground md:hidden">{row.category}</p>
-                        )}
-                        <p className="text-sm text-muted-foreground md:hidden">
-                          Submitted: {formatHistoryDate(row.submittedAt)}
-                        </p>
-                      </div>
-                    </TableCell>
-                    {showStaffColumn ? (
-                      <TableCell className="hidden md:table-cell">{row.staffName}</TableCell>
-                    ) : showBudgetColumn ? (
-                      <TableCell className="hidden md:table-cell">{row.category}</TableCell>
-                    ) : null}
-                    <TableCell className="hidden md:table-cell">{formatHistoryDate(row.submittedAt)}</TableCell>
-                    {showBudgetColumn ? (
-                      <TableCell className="text-right">{row.totalBudget.toFixed(2)}</TableCell>
-                    ) : null}
-                    <TableCell className="text-right">
-                      <RequisitionStatusBadge statusGroup={row.statusGroup} />
-                    </TableCell>
-                    {showActions ? (
-                      <TableCell className="text-right">
-                        <Button type="button" variant="outline" size="sm" disabled>
-                          View
-                        </Button>
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={showActions ? 7 : showStaffColumn || showBudgetColumn ? 6 : 5}
-                    className="py-10 text-center text-sm text-muted-foreground"
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setPhaseFilter(tab.value)}
+                className={cn(
+                  "rounded-xl border p-4 text-left transition-colors",
+                  active ? styles.summaryActive : styles.summaryIdle,
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} aria-hidden />
+                    <Icon className={cn("h-4 w-4", active ? styles.text : "text-muted-foreground")} />
+                  </span>
+                  <span className={cn("text-2xl font-bold tracking-tight", active && styles.text)}>{count}</span>
+                </div>
+                <p className={cn("mt-2 text-sm font-medium", active ? styles.text : "text-foreground")}>{tab.label}</p>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Requisition history</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <Tabs value={phaseFilter} onValueChange={(v) => setPhaseFilter(v as HistoryPhaseFilter)}>
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
+              {PHASE_TABS.map((tab) => {
+                const light = phaseFilterTrafficLight(tab.value);
+                const styles = TRAFFIC_LIGHT_STYLES[light];
+                return (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className={cn("gap-1.5 text-xs sm:text-sm", styles.tabActive)}
                   >
-                    No requisitions found for this status.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                    <span className={cn("h-2 w-2 rounded-full", styles.dot)} aria-hidden />
+                    {tab.label}
+                    {summary && tab.summaryKey !== "all" ? (
+                      <span
+                        className={cn(
+                          "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                          styles.bg,
+                          styles.text,
+                        )}
+                      >
+                        {summary[tab.summaryKey as keyof typeof summary]}
+                      </span>
+                    ) : summary && tab.value === "all" ? (
+                      <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                        {summary.all}
+                      </span>
+                    ) : null}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
 
-          {paginated ? (
-            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          {activePhaseHint ? (
+            <p
+              className={cn(
+                "rounded-lg border px-3 py-2 text-sm",
+                activeHintStyles.border,
+                activeHintStyles.bg,
+                activeHintStyles.text,
+              )}
+            >
+              <span className={cn("mr-2 inline-block h-2 w-2 rounded-full align-middle", activeHintStyles.dot)} />
+              {activePhaseHint}
+            </p>
+          ) : null}
+
+          {isError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Unable to load history</AlertTitle>
+              <AlertDescription>{error instanceof Error ? error.message : "Try again later."}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading requisitions…
+            </div>
+          ) : rows.length ? (
+            <div className="grid gap-4">
+              {rows.map((row) => (
+                <RequisitionHistoryCard
+                  key={row.requisitionId}
+                  item={row}
+                  showBudget={showBudget}
+                  editPath={editPath}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+              No requisitions found for this phase.
+            </div>
+          )}
+
+          {paginated && !isLoading ? (
+            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Total requisitions: <span className="font-medium text-foreground">{total}</span>
-                {isFetching && !isLoading ? <span className="ml-2 text-xs">Updating…</span> : null}
+                Showing <span className="font-medium text-foreground">{rows.length}</span> of{" "}
+                <span className="font-medium text-foreground">{total}</span>
+                {isFetching ? <span className="ml-2 text-xs">Updating…</span> : null}
               </p>
               {total > 0 ? (
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -200,8 +261,8 @@ export function RequisitionHistoryPanel({
               ) : null}
             </div>
           ) : null}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

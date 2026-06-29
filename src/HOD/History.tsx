@@ -16,14 +16,13 @@ export function HODHistoryPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">History</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight">Activity Log</h1>
             </div>
           </div>
 
           <RequisitionHistoryPanel
-            description="Filter department requisitions by status."
-            showStaffColumn
-            showActions
+            description="Your requisitions — expand a row for approval progress and post-training checklist."
+            editPath="/hod/requisitions"
             pageSize={10}
           />
         </div>

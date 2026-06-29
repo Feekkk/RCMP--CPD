@@ -1,25 +1,19 @@
 import { Badge } from "@/components/ui/badge";
-import { type HistoryStatusGroup, statusGroupLabel } from "@/lib/requisitionStatus";
+import {
+  type HistoryStatusGroup,
+  statusGroupLabel,
+  statusGroupTrafficLight,
+  TRAFFIC_LIGHT_STYLES,
+} from "@/lib/requisitionStatus";
+import { cn } from "@/lib/utils";
 
 export function RequisitionStatusBadge({ statusGroup }: { statusGroup: HistoryStatusGroup }) {
-  const variant =
-    statusGroup === "approved"
-      ? "default"
-      : statusGroup === "rejected"
-        ? "destructive"
-        : statusGroup === "pending"
-          ? "outline"
-          : statusGroup === "draft"
-            ? "secondary"
-            : "outline";
-
-  const className =
-    statusGroup === "pending"
-      ? "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
-      : undefined;
+  const light = statusGroupTrafficLight(statusGroup);
+  const styles = TRAFFIC_LIGHT_STYLES[light];
 
   return (
-    <Badge variant={variant} className={className}>
+    <Badge variant="outline" className={cn("gap-1.5 font-medium", styles.badge)}>
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", styles.dot)} aria-hidden />
       {statusGroupLabel(statusGroup)}
     </Badge>
   );

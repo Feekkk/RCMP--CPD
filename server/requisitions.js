@@ -13,16 +13,42 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 const STATUS_SAVE_DRAFT = 1;
 const STATUS_SUBMITTED = 2;
 
-const ADMIN_ROLE_ID = 2;
-const HOD_ROLE_ID = 3;
+const HISTORY_PHASES = ["draft", "pre_training", "post_training", "completed", "rejected"];
 
-const HISTORY_STATUS_GROUPS = {
-  submitted: ["submitted"],
-  pending: ["being_process", "verified"],
-  approved: ["approved"],
-  rejected: ["rejected"],
-  draft: ["save_draft"],
-};
+const WORKFLOW_PHASE_SQL = `
+  CASE
+    WHEN rs.details = 'save_draft' THEN 'draft'
+    WHEN rs.details = 'rejected' THEN 'rejected'
+    WHEN rs.details IN ('submitted', 'being_process', 'verified') THEN 'pre_training'
+    WHEN rs.details = 'approved' AND (
+      COALESCE(pt.cpd_points_counted, 0) = 1
+      OR (
+        COALESCE(pt.attendance_attached, 0) = 1
+        AND COALESCE(pt.e_survey_filled, 0) = 1
+        AND COALESCE(pt.hod_evaluation_filled, 0) = 1
+      )
+    ) THEN 'completed'
+    WHEN rs.details = 'approved' AND GREATEST(
+      IFNULL(rd.date_1, '0000-01-01'),
+      IFNULL(rd.date_2, '0000-01-01'),
+      IFNULL(rd.date_3, '0000-01-01'),
+      IFNULL(rd.date_4, '0000-01-01'),
+      IFNULL(rd.date_5, '0000-01-01')
+    ) < CURDATE() THEN 'post_training'
+    WHEN rs.details = 'approved' THEN 'pre_training'
+    ELSE 'pre_training'
+  END
+`;
+
+const HISTORY_FROM_JOINS = `
+  FROM requisitions r
+  INNER JOIN requisition_status rs ON rs.id = r.status_id
+  INNER JOIN staff s ON s.id = r.submitted_by
+  INNER JOIN department_table d ON d.department_id = s.department_id
+  INNER JOIN budget b ON b.id_budget = r.id_budget
+  INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+  LEFT JOIN post_training pt ON pt.requisition_id = r.id
+`;
 
 function displayNameFromEmail(email) {
   const local = String(email ?? "").split("@")[0] ?? "";
@@ -45,27 +71,112 @@ function statusGroupFromDb(status) {
 }
 
 function buildHistoryScope(user) {
-  const roleId = user.roleId;
-  const staffId = user.staffId;
-  const departmentId = user.departmentId;
-
-  if (roleId === ADMIN_ROLE_ID) {
-    return { clause: "1=1", params: [] };
-  }
-  if (roleId === HOD_ROLE_ID) {
-    return { clause: "s.department_id = ?", params: [departmentId] };
-  }
-  return { clause: "r.submitted_by = ?", params: [staffId] };
+  return { clause: "r.submitted_by = ?", params: [user.staffId] };
 }
 
-function buildHistoryStatusFilter(statusFilter) {
-  const key = String(statusFilter ?? "all").trim().toLowerCase();
-  if (key === "all" || !HISTORY_STATUS_GROUPS[key]) {
+function buildHistoryPhaseFilter(phaseFilter) {
+  const key = String(phaseFilter ?? "all").trim().toLowerCase();
+  if (key === "all" || !HISTORY_PHASES.includes(key)) {
     return { clause: "", params: [] };
   }
-  const statuses = HISTORY_STATUS_GROUPS[key];
-  const placeholders = statuses.map(() => "?").join(", ");
-  return { clause: `rs.details IN (${placeholders})`, params: statuses };
+  return { clause: `(${WORKFLOW_PHASE_SQL}) = ?`, params: [key] };
+}
+
+function collectProgrammeDates(row) {
+  return extractProgrammeSlotsFromRow(row).map((slot) => slot.date);
+}
+
+function formatTimeForInput(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (value instanceof Date) {
+    return value.toISOString().slice(11, 16);
+  }
+  const text = String(value).trim();
+  if (!text) return "";
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+function normalizeTime(value) {
+  const text = trimOrEmpty(value);
+  if (!text) return null;
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3] ?? 0);
+  if (hours > 23 || minutes > 59 || seconds > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function extractProgrammeSlots(slots) {
+  if (!Array.isArray(slots)) return [];
+  const result = [];
+  for (const slot of slots) {
+    const date = trimOrEmpty(slot?.date);
+    if (!date) continue;
+    result.push({
+      date,
+      from: normalizeTime(slot?.from),
+      to: normalizeTime(slot?.to),
+    });
+    if (result.length >= 5) break;
+  }
+  return result;
+}
+
+function extractProgrammeSlotsFromRow(row) {
+  const slots = [];
+  for (let i = 1; i <= 5; i += 1) {
+    const date = row[`date_${i}`];
+    if (date == null) continue;
+    const dateStr = date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+    slots.push({
+      date: dateStr,
+      from: formatTimeForInput(row[`time_${i}`]),
+      to: formatTimeForInput(row[`time_to_${i}`]),
+    });
+  }
+  return slots;
+}
+
+function programmeSlotSqlValues(slots) {
+  const values = {
+    dates: [null, null, null, null, null],
+    times: [null, null, null, null, null],
+    timesTo: [null, null, null, null, null],
+  };
+  for (let i = 0; i < Math.min(slots.length, 5); i += 1) {
+    values.dates[i] = slots[i].date;
+    values.times[i] = slots[i].from;
+    values.timesTo[i] = slots[i].to;
+  }
+  return values;
+}
+
+function deriveWorkflowPhase(status, row) {
+  if (status === "save_draft") return "draft";
+  if (status === "rejected") return "rejected";
+  if (status === "submitted" || status === "being_process" || status === "verified") {
+    return "pre_training";
+  }
+  if (status === "approved") {
+    const attendance = Number(row.attendance_attached ?? 0) === 1;
+    const survey = Number(row.e_survey_filled ?? 0) === 1;
+    const hodEval = Number(row.hod_evaluation_filled ?? 0) === 1;
+    const cpdCounted = Number(row.cpd_points_counted ?? 0) === 1;
+    if (cpdCounted || (attendance && survey && hodEval)) return "completed";
+
+    const dates = collectProgrammeDates(row);
+    if (dates.length) {
+      const last = dates.reduce((a, b) => (a > b ? a : b));
+      const today = new Date().toISOString().slice(0, 10);
+      if (last < today) return "post_training";
+    }
+    return "pre_training";
+  }
+  return "pre_training";
 }
 
 function mapHistoryRow(row) {
@@ -75,41 +186,109 @@ function mapHistoryRow(row) {
     Number(row.travel_fare ?? 0) +
     Number(row.others ?? 0);
 
+  const programmeDates = collectProgrammeDates(row);
+  const workflowPhase = deriveWorkflowPhase(row.status, row);
+
+  const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
+  const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
+  const hodEvaluationFilled = Number(row.hod_evaluation_filled ?? 0) === 1;
+  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
+  const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
+
   return {
     requisitionId: row.id,
     id: `REQ-${String(row.id).padStart(4, "0")}`,
     title: row.title,
     category: row.category,
+    venue: row.venue,
     submittedAt: row.created_at,
     updatedAt: row.updated_at,
+    programmeDates,
     totalBudget,
     status: row.status,
     statusGroup: statusGroupFromDb(row.status),
+    workflowPhase,
     staffName: displayNameFromEmail(row.staff_email),
     staffEmail: row.staff_email,
     departmentName: row.department_name ?? null,
+    hrdcClaimable: Number(row.HRDC_claimable ?? 0) === 1,
+    postTraining: {
+      attendanceAttached,
+      eSurveyFilled,
+      hodEvaluationFilled,
+      cpdPointsCounted,
+      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      completedSteps: postTrainingCompleted,
+      totalSteps: 3,
+      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+    },
   };
 }
 
-async function queryRequisitionHistory(pool, { user, statusFilter, page, pageSize }) {
+async function queryHistorySummary(pool, user) {
   const scope = buildHistoryScope(user);
-  const status = buildHistoryStatusFilter(statusFilter);
+  const [rows] = await pool.execute(
+    `SELECT (${WORKFLOW_PHASE_SQL}) AS workflow_phase, COUNT(*) AS cnt
+     ${HISTORY_FROM_JOINS}
+     WHERE ${scope.clause}
+     GROUP BY workflow_phase`,
+    scope.params,
+  );
+
+  const summary = {
+    all: 0,
+    draft: 0,
+    preTraining: 0,
+    postTraining: 0,
+    completed: 0,
+    rejected: 0,
+  };
+
+  for (const row of rows) {
+    const count = Number(row.cnt ?? 0);
+    summary.all += count;
+    switch (row.workflow_phase) {
+      case "draft":
+        summary.draft = count;
+        break;
+      case "pre_training":
+        summary.preTraining = count;
+        break;
+      case "post_training":
+        summary.postTraining = count;
+        break;
+      case "completed":
+        summary.completed = count;
+        break;
+      case "rejected":
+        summary.rejected = count;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return summary;
+}
+
+async function queryRequisitionHistory(pool, { user, phaseFilter, page, pageSize }) {
+  const scope = buildHistoryScope(user);
+  const phase = buildHistoryPhaseFilter(phaseFilter);
 
   const whereParts = [scope.clause];
   const whereParams = [...scope.params];
 
-  if (status.clause) {
-    whereParts.push(status.clause);
-    whereParams.push(...status.params);
+  if (phase.clause) {
+    whereParts.push(phase.clause);
+    whereParams.push(...phase.params);
   }
 
   const whereSql = whereParts.join(" AND ");
 
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS total
-     FROM requisitions r
-     INNER JOIN requisition_status rs ON rs.id = r.status_id
-     INNER JOIN staff s ON s.id = r.submitted_by
+     ${HISTORY_FROM_JOINS}
      WHERE ${whereSql}`,
     whereParams,
   );
@@ -119,21 +298,26 @@ async function queryRequisitionHistory(pool, { user, statusFilter, page, pageSiz
   const offset = (safePage - 1) * pageSize;
 
   const [rows] = await pool.execute(
-    `SELECT r.id, r.category, r.title, r.created_at, r.updated_at,
+    `SELECT r.id, r.category, r.title, r.venue, r.HRDC_claimable, r.created_at, r.updated_at,
             rs.details AS status,
             s.email AS staff_email,
             d.department_name,
-            b.mileage, b.accommodation, b.travel_fare, b.others
-     FROM requisitions r
-     INNER JOIN requisition_status rs ON rs.id = r.status_id
-     INNER JOIN staff s ON s.id = r.submitted_by
-     INNER JOIN department_table d ON d.department_id = s.department_id
-     INNER JOIN budget b ON b.id_budget = r.id_budget
+            b.mileage, b.accommodation, b.travel_fare, b.others,
+            rd.date_1, rd.time_1, rd.time_to_1,
+            rd.date_2, rd.time_2, rd.time_to_2,
+            rd.date_3, rd.time_3, rd.time_to_3,
+            rd.date_4, rd.time_4, rd.time_to_4,
+            rd.date_5, rd.time_5, rd.time_to_5,
+            pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled,
+            pt.cpd_points_counted, pt.cpd_points
+     ${HISTORY_FROM_JOINS}
      WHERE ${whereSql}
      ORDER BY r.updated_at DESC
      LIMIT ${pageSize} OFFSET ${offset}`,
     whereParams,
   );
+
+  const summary = await queryHistorySummary(pool, user);
 
   return {
     requisitions: rows.map(mapHistoryRow),
@@ -141,6 +325,7 @@ async function queryRequisitionHistory(pool, { user, statusFilter, page, pageSiz
     page: safePage,
     pageSize,
     totalPages,
+    summary,
   };
 }
 
@@ -176,17 +361,7 @@ function trimOrEmpty(value) {
 }
 
 function extractUniqueDates(slots) {
-  if (!Array.isArray(slots)) return [];
-  const seen = new Set();
-  const dates = [];
-  for (const slot of slots) {
-    const date = trimOrEmpty(slot?.date);
-    if (!date || seen.has(date)) continue;
-    seen.add(date);
-    dates.push(date);
-    if (dates.length >= 5) break;
-  }
-  return dates;
+  return extractProgrammeSlots(slots).map((slot) => slot.date);
 }
 
 function validateRequisitionBody(body, submitAs) {
@@ -200,13 +375,13 @@ function validateRequisitionBody(body, submitAs) {
   const address = trimOrEmpty(body?.organiserAddress);
   const phone = trimOrEmpty(body?.organiserPhone);
   const email = trimOrEmpty(body?.organiserEmail);
-  const dates = extractUniqueDates(body?.programmeSlots);
+  const programmeSlots = extractProgrammeSlots(body?.programmeSlots);
 
   if (submitAs === "submit") {
     if (!category) errors.push("Category is required.");
     if (!justification) errors.push("Justification is required.");
     if (!title) errors.push("Programme title is required.");
-    if (!dates.length) errors.push("At least one programme date is required.");
+    if (!programmeSlots.length) errors.push("At least one programme date is required.");
     if (!venue) errors.push("Venue is required.");
     if (!organiser) errors.push("Organiser is required.");
     if (!contactPerson) errors.push("Contact person is required.");
@@ -215,13 +390,19 @@ function validateRequisitionBody(body, submitAs) {
     if (!email || !email.includes("@")) errors.push("A valid organiser email is required.");
   }
 
-  return { errors, dates };
+  return { errors, programmeSlots };
 }
 
 function mapRequisitionDbError(err) {
   const code = err?.code;
   const message = String(err?.message ?? "");
 
+  if (code === "ER_BAD_FIELD_ERROR" && message.includes("time_")) {
+    return {
+      status: 503,
+      error: "Database requisition_date table is outdated. Run db/migrations/add_requisition_times.sql.",
+    };
+  }
   if (code === "ER_NO_SUCH_TABLE") {
     return {
       status: 503,
@@ -242,6 +423,181 @@ function documentPathsFromFiles(files) {
   return (files ?? []).slice(0, 3).map((file) => path.join("uploads", "requisitions", file.filename));
 }
 
+async function fetchOwnedDraftRequisition(pool, requisitionId, staffId) {
+  const [rows] = await pool.execute(
+    `SELECT r.id, r.submitted_by, r.category, r.justification, r.title, r.venue, r.HRDC_claimable,
+            r.organiser, r.contact_person, r.address, r.phone_num, r.email,
+            r.id_date, r.id_budget, r.id_documents, r.status_id,
+            rs.details AS status,
+            b.mileage, b.accommodation, b.travel_fare, b.others,
+            rd.date_1, rd.time_1, rd.time_to_1,
+            rd.date_2, rd.time_2, rd.time_to_2,
+            rd.date_3, rd.time_3, rd.time_to_3,
+            rd.date_4, rd.time_4, rd.time_to_4,
+            rd.date_5, rd.time_5, rd.time_to_5,
+            doc.path_1, doc.path_2, doc.path_3
+     FROM requisitions r
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN budget b ON b.id_budget = r.id_budget
+     INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+     LEFT JOIN requisition_documents doc ON doc.id_documents = r.id_documents
+     WHERE r.id = ? AND r.submitted_by = ?
+     LIMIT 1`,
+    [requisitionId, staffId],
+  );
+  return rows[0] ?? null;
+}
+
+function mapRequisitionToForm(row) {
+  const programmeSlots = extractProgrammeSlotsFromRow(row);
+  const slotsForForm = programmeSlots.length
+    ? programmeSlots.map((slot) => ({ date: slot.date, from: slot.from, to: slot.to }))
+    : [{ date: "", from: "", to: "" }];
+
+  return {
+    requisitionId: row.id,
+    status: row.status,
+    category: row.category ?? "",
+    justification: row.justification ?? "",
+    programmeTitle: row.title ?? "",
+    programmeSlots: slotsForForm,
+    programmeVenue: row.venue ?? "",
+    programmeFees: "",
+    fundingClaim: Number(row.HRDC_claimable) === 1 ? "hrdc" : "",
+    organiserName: row.organiser ?? "",
+    organiserAddress: row.address ?? "",
+    organiserPhone: row.phone_num ?? "",
+    organiserEmail: row.email ?? "",
+    organiserContactPerson: row.contact_person ?? "",
+    budgetMileage: String(row.mileage ?? 0),
+    budgetAccommodation: String(row.accommodation ?? 0),
+    budgetTravelFare: String(row.travel_fare ?? 0),
+    budgetOthers: String(row.others ?? 0),
+    existingDocuments: [row.path_1, row.path_2, row.path_3].filter(Boolean),
+  };
+}
+
+async function updateRequisition(pool, { requisitionId, staffId, body, files, statusId }) {
+  const existing = await fetchOwnedDraftRequisition(pool, requisitionId, staffId);
+  if (!existing) {
+    return { error: "Requisition not found.", status: 404 };
+  }
+  if (existing.status !== "save_draft") {
+    return { error: "Only draft requisitions can be edited.", status: 400 };
+  }
+
+  const category = trimOrEmpty(body?.category);
+  const justification = trimOrEmpty(body?.justification);
+  const title = trimOrEmpty(body?.programmeTitle);
+  const venue = trimOrEmpty(body?.programmeVenue);
+  const organiser = trimOrEmpty(body?.organiserName);
+  const contactPerson = trimOrEmpty(body?.organiserContactPerson);
+  const address = trimOrEmpty(body?.organiserAddress);
+  const phone = trimOrEmpty(body?.organiserPhone);
+  const email = trimOrEmpty(body?.organiserEmail);
+  const fundingClaim = trimOrEmpty(body?.fundingClaim);
+  const hrdcClaimable = fundingClaim === "hrdc" ? 1 : 0;
+
+  const mileage = parseDecimal(body?.budgetMileage);
+  const accommodation = parseDecimal(body?.budgetAccommodation);
+  const travelFare = parseDecimal(body?.budgetTravelFare);
+  const others = parseDecimal(body?.budgetOthers) + parseDecimal(body?.programmeFees);
+
+  const programmeSlots = extractProgrammeSlots(body?.programmeSlots);
+  const slotValues = programmeSlotSqlValues(programmeSlots);
+  const docPaths = documentPathsFromFiles(files);
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
+      `UPDATE budget SET mileage = ?, accommodation = ?, travel_fare = ?, others = ? WHERE id_budget = ?`,
+      [mileage, accommodation, travelFare, others, existing.id_budget],
+    );
+
+    await conn.execute(
+      `UPDATE requisition_date SET
+        date_1 = ?, time_1 = ?, time_to_1 = ?,
+        date_2 = ?, time_2 = ?, time_to_2 = ?,
+        date_3 = ?, time_3 = ?, time_to_3 = ?,
+        date_4 = ?, time_4 = ?, time_to_4 = ?,
+        date_5 = ?, time_5 = ?, time_to_5 = ?
+       WHERE id_date = ?`,
+      [
+        slotValues.dates[0], slotValues.times[0], slotValues.timesTo[0],
+        slotValues.dates[1], slotValues.times[1], slotValues.timesTo[1],
+        slotValues.dates[2], slotValues.times[2], slotValues.timesTo[2],
+        slotValues.dates[3], slotValues.times[3], slotValues.timesTo[3],
+        slotValues.dates[4], slotValues.times[4], slotValues.timesTo[4],
+        existing.id_date,
+      ],
+    );
+
+    let idDocuments = existing.id_documents;
+    if (docPaths.length > 0) {
+      if (idDocuments) {
+        await conn.execute(
+          `UPDATE requisition_documents SET path_1 = ?, path_2 = ?, path_3 = ? WHERE id_documents = ?`,
+          [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null, idDocuments],
+        );
+      } else {
+        const [docResult] = await conn.execute(
+          `INSERT INTO requisition_documents (path_1, path_2, path_3) VALUES (?, ?, ?)`,
+          [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null],
+        );
+        idDocuments = docResult.insertId;
+      }
+    }
+
+    await conn.execute(
+      `UPDATE requisitions SET
+        category = ?, justification = ?, title = ?, venue = ?, HRDC_claimable = ?,
+        organiser = ?, contact_person = ?, address = ?, phone_num = ?, email = ?,
+        id_documents = ?, status_id = ?
+       WHERE id = ?`,
+      [
+        category,
+        justification,
+        title,
+        venue,
+        hrdcClaimable,
+        organiser,
+        contactPerson,
+        address,
+        phone,
+        email,
+        idDocuments,
+        statusId,
+        requisitionId,
+      ],
+    );
+
+    if (statusId !== existing.status_id) {
+      await conn.execute(
+        `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
+         VALUES (?, ?, ?, ?, NULL)`,
+        [requisitionId, staffId, existing.status_id, statusId],
+      );
+    }
+
+    await conn.commit();
+    return { requisitionId, statusId };
+  } catch (err) {
+    await conn.rollback();
+    for (const file of files ?? []) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        /* ignore */
+      }
+    }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 async function insertRequisition(pool, { staffId, body, files, statusId }) {
   const category = trimOrEmpty(body?.category);
   const justification = trimOrEmpty(body?.justification);
@@ -260,7 +616,8 @@ async function insertRequisition(pool, { staffId, body, files, statusId }) {
   const travelFare = parseDecimal(body?.budgetTravelFare);
   const others = parseDecimal(body?.budgetOthers) + parseDecimal(body?.programmeFees);
 
-  const dates = extractUniqueDates(body?.programmeSlots);
+  const programmeSlots = extractProgrammeSlots(body?.programmeSlots);
+  const slotValues = programmeSlotSqlValues(programmeSlots);
   const docPaths = documentPathsFromFiles(files);
 
   const conn = await pool.getConnection();
@@ -274,8 +631,20 @@ async function insertRequisition(pool, { staffId, body, files, statusId }) {
     const idBudget = budgetResult.insertId;
 
     const [dateResult] = await conn.execute(
-      `INSERT INTO requisition_date (date_1, date_2, date_3, date_4, date_5) VALUES (?, ?, ?, ?, ?)`,
-      [dates[0] ?? null, dates[1] ?? null, dates[2] ?? null, dates[3] ?? null, dates[4] ?? null],
+      `INSERT INTO requisition_date (
+        date_1, time_1, time_to_1,
+        date_2, time_2, time_to_2,
+        date_3, time_3, time_to_3,
+        date_4, time_4, time_to_4,
+        date_5, time_5, time_to_5
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        slotValues.dates[0], slotValues.times[0], slotValues.timesTo[0],
+        slotValues.dates[1], slotValues.times[1], slotValues.timesTo[1],
+        slotValues.dates[2], slotValues.times[2], slotValues.timesTo[2],
+        slotValues.dates[3], slotValues.times[3], slotValues.timesTo[3],
+        slotValues.dates[4], slotValues.times[4], slotValues.timesTo[4],
+      ],
     );
     const idDate = dateResult.insertId;
 
@@ -416,11 +785,11 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     try {
       const page = parsePositiveInt(req.query.page, 1);
       const pageSize = Math.min(parsePositiveInt(req.query.pageSize, 10) ?? 10, 100);
-      const statusFilter = String(req.query.status ?? "all").trim().toLowerCase();
+      const phaseFilter = String(req.query.phase ?? req.query.status ?? "all").trim().toLowerCase();
 
       const result = await queryRequisitionHistory(pool, {
         user: req.session.user,
-        statusFilter,
+        phaseFilter,
         page,
         pageSize,
       });
@@ -437,7 +806,7 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     try {
       const result = await queryRequisitionHistory(pool, {
         user: req.session.user,
-        statusFilter: "all",
+        phaseFilter: "all",
         page: 1,
         pageSize: 100,
       });
@@ -458,4 +827,103 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       return res.status(mapped.status).json({ error: mapped.error });
     }
   });
+
+  apiRouter.get("/requisitions/:requisitionId", generalLimiter, requireAuth, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const row = await fetchOwnedDraftRequisition(pool, requisitionId, req.session.user.staffId);
+      if (!row) {
+        return res.status(404).json({ error: "Requisition not found." });
+      }
+      if (row.status !== "save_draft") {
+        return res.status(400).json({ error: "Only draft requisitions can be edited." });
+      }
+
+      return res.json(mapRequisitionToForm(row));
+    } catch (err) {
+      console.error("Get requisition error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.patch(
+    "/requisitions/:requisitionId",
+    generalLimiter,
+    requireAuth,
+    (req, res, next) => {
+      upload.array("documents", 3)(req, res, (err) => {
+        if (err) {
+          const mapped = mapRequisitionDbError(err);
+          return res.status(mapped.status).json({ error: mapped.error });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      const body = parseRequisitionBody(req);
+      if (!body) {
+        return res.status(400).json({ error: "Invalid requisition payload." });
+      }
+
+      const submitAs = trimOrEmpty(body.submitAs) === "submit" ? "submit" : "draft";
+      const statusId = submitAs === "submit" ? STATUS_SUBMITTED : STATUS_SAVE_DRAFT;
+      const { errors } = validateRequisitionBody(body, submitAs);
+
+      if (errors.length) {
+        for (const file of req.files ?? []) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch {
+            /* ignore */
+          }
+        }
+        return res.status(400).json({ error: errors.join(" ") });
+      }
+
+      try {
+        const result = await updateRequisition(pool, {
+          requisitionId,
+          staffId: req.session.user.staffId,
+          body,
+          files: req.files,
+          statusId,
+        });
+
+        if (result.error) {
+          for (const file of req.files ?? []) {
+            try {
+              fs.unlinkSync(file.path);
+            } catch {
+              /* ignore */
+            }
+          }
+          return res.status(result.status).json({ error: result.error });
+        }
+
+        return res.json({
+          requisitionId: result.requisitionId,
+          statusId: result.statusId,
+          status: submitAs === "submit" ? "submitted" : "save_draft",
+          message:
+            submitAs === "submit"
+              ? "Requisition submitted successfully."
+              : "Draft updated successfully.",
+        });
+      } catch (err) {
+        console.error("Update requisition error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
 }

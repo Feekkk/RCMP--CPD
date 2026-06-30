@@ -12,6 +12,9 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 
 const STATUS_SAVE_DRAFT = 1;
 const STATUS_SUBMITTED = 2;
+const STATUS_BEING_PROCESS = 3;
+const STATUS_REJECTED = 6;
+const HOD_ROLE_ID = 3;
 
 const HISTORY_PHASES = ["draft", "pre_training", "post_training", "completed", "rejected"];
 
@@ -72,6 +75,264 @@ function statusGroupFromDb(status) {
 
 function buildHistoryScope(user) {
   return { clause: "r.submitted_by = ?", params: [user.staffId] };
+}
+
+function requireHod(req, res, next) {
+  if (!req.session?.user?.staffId) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+  if (req.session.user.roleId !== HOD_ROLE_ID) {
+    return res.status(403).json({ error: "Head of Department access required." });
+  }
+  if (!req.session.user.departmentId) {
+    return res.status(403).json({ error: "Your account has no department assigned." });
+  }
+  next();
+}
+
+function hodQueueStatusFromDb(status) {
+  if (status === "being_process") return "recommended";
+  if (status === "submitted") return "pending";
+  return "pending";
+}
+
+const HOD_REVIEW_DETAIL_SELECT = `
+  SELECT r.id, r.category, r.title, r.justification, r.venue, r.HRDC_claimable, r.created_at,
+         r.organiser, r.contact_person, r.address, r.phone_num, r.email,
+         rs.details AS status,
+         s.email AS staff_email,
+         d.department_name,
+         b.mileage, b.accommodation, b.travel_fare, b.others,
+         rd.date_1, rd.time_1, rd.time_to_1,
+         rd.date_2, rd.time_2, rd.time_to_2,
+         rd.date_3, rd.time_3, rd.time_to_3,
+         rd.date_4, rd.time_4, rd.time_to_4,
+         rd.date_5, rd.time_5, rd.time_to_5,
+         doc.path_1, doc.path_2, doc.path_3
+`;
+
+const HOD_REVIEW_DETAIL_JOINS = `
+  FROM requisitions r
+  INNER JOIN requisition_status rs ON rs.id = r.status_id
+  INNER JOIN staff s ON s.id = r.submitted_by
+  INNER JOIN department_table d ON d.department_id = s.department_id
+  INNER JOIN budget b ON b.id_budget = r.id_budget
+  INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+  LEFT JOIN requisition_documents doc ON doc.id_documents = r.id_documents
+`;
+
+function documentNameFromPath(filePath) {
+  return path.basename(String(filePath ?? ""));
+}
+
+function mapHodReviewDocuments(requisitionId, row) {
+  return [row.path_1, row.path_2, row.path_3]
+    .map((filePath, index) => ({ filePath, index }))
+    .filter((entry) => Boolean(entry.filePath))
+    .map(({ filePath, index }) => ({
+      index,
+      name: documentNameFromPath(filePath),
+      url: `/api/requisitions/${requisitionId}/documents/${index}`,
+    }));
+}
+
+function mapHodReviewRow(row) {
+  const mileage = Number(row.mileage ?? 0);
+  const accommodation = Number(row.accommodation ?? 0);
+  const travelFare = Number(row.travel_fare ?? 0);
+  const others = Number(row.others ?? 0);
+  const programmeSlots = extractProgrammeSlotsFromRow(row);
+
+  return {
+    requisitionId: row.id,
+    id: `REQ-${String(row.id).padStart(4, "0")}`,
+    title: row.title,
+    category: row.category,
+    venue: row.venue ?? "",
+    justification: row.justification ?? "",
+    submittedAt: row.created_at,
+    programmeDates: collectProgrammeDates(row),
+    programmeSlots,
+    totalBudget: mileage + accommodation + travelFare + others,
+    budget: {
+      mileage,
+      accommodation,
+      travelFare,
+      others,
+      total: mileage + accommodation + travelFare + others,
+    },
+    status: row.status,
+    hodStatus: hodQueueStatusFromDb(row.status),
+    staffName: displayNameFromEmail(row.staff_email),
+    staffEmail: row.staff_email,
+    departmentName: row.department_name ?? null,
+    hrdcClaimable: Number(row.HRDC_claimable ?? 0) === 1,
+    fundingClaim: Number(row.HRDC_claimable ?? 0) === 1 ? "hrdc" : "",
+    organiser: {
+      name: row.organiser ?? "",
+      contactPerson: row.contact_person ?? "",
+      address: row.address ?? "",
+      phone: row.phone_num ?? "",
+      email: row.email ?? "",
+    },
+    documents: mapHodReviewDocuments(row.id, row),
+  };
+}
+
+function resolveUploadPath(relativePath) {
+  const uploadsRoot = path.resolve(path.join(__dirname, "..", "uploads", "requisitions"));
+  const resolved = path.resolve(path.join(__dirname, "..", String(relativePath ?? "")));
+  if (!resolved.startsWith(uploadsRoot)) {
+    return null;
+  }
+  return resolved;
+}
+
+async function queryHodReviewDetail(pool, requisitionId, departmentId) {
+  const [rows] = await pool.execute(
+    `${HOD_REVIEW_DETAIL_SELECT}
+     ${HOD_REVIEW_DETAIL_JOINS}
+     WHERE r.id = ?
+       AND s.department_id = ?
+       AND rs.details IN ('submitted', 'being_process')
+     LIMIT 1`,
+    [requisitionId, departmentId],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+  return mapHodReviewRow(row);
+}
+
+async function fetchHodRequisitionDocumentPath(pool, requisitionId, departmentId, slotIndex) {
+  if (slotIndex < 0 || slotIndex > 2) return null;
+
+  const [rows] = await pool.execute(
+    `SELECT doc.path_1, doc.path_2, doc.path_3
+     FROM requisitions r
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN staff s ON s.id = r.submitted_by
+     LEFT JOIN requisition_documents doc ON doc.id_documents = r.id_documents
+     WHERE r.id = ?
+       AND s.department_id = ?
+       AND rs.details IN ('submitted', 'being_process')
+     LIMIT 1`,
+    [requisitionId, departmentId],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const paths = [row.path_1, row.path_2, row.path_3];
+  const relativePath = paths[slotIndex];
+  if (!relativePath) return null;
+
+  return resolveUploadPath(relativePath);
+}
+
+function mimeTypeForDocument(filePath) {
+  const ext = path.extname(String(filePath ?? "")).toLowerCase();
+  switch (ext) {
+    case ".pdf":
+      return "application/pdf";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+async function queryHodReviewQueue(pool, departmentId) {
+  const [rows] = await pool.execute(
+    `${HOD_REVIEW_DETAIL_SELECT}
+     ${HOD_REVIEW_DETAIL_JOINS}
+     WHERE s.department_id = ?
+       AND rs.details IN ('submitted', 'being_process')
+     ORDER BY r.created_at DESC`,
+    [departmentId],
+  );
+
+  const items = rows.map(mapHodReviewRow);
+
+  return {
+    requisitions: items,
+    summary: {
+      total: items.length,
+      pending: items.filter((item) => item.hodStatus === "pending").length,
+      recommended: items.filter((item) => item.hodStatus === "recommended").length,
+    },
+  };
+}
+
+async function fetchDepartmentRequisitionForHod(pool, requisitionId, departmentId) {
+  const [rows] = await pool.execute(
+    `SELECT r.id, r.status_id, rs.details AS status
+     FROM requisitions r
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN staff s ON s.id = r.submitted_by
+     WHERE r.id = ? AND s.department_id = ?
+     LIMIT 1`,
+    [requisitionId, departmentId],
+  );
+  return rows[0] ?? null;
+}
+
+async function hodReviewRequisition(pool, { requisitionId, departmentId, reviewerStaffId, decision, remarks }) {
+  const row = await fetchDepartmentRequisitionForHod(pool, requisitionId, departmentId);
+  if (!row) {
+    return { error: "Requisition not found in your department.", status: 404 };
+  }
+
+  if (row.status !== "submitted") {
+    return {
+      error:
+        row.status === "being_process"
+          ? "This requisition has already been recommended."
+          : "Only submitted requisitions can be reviewed.",
+      status: 400,
+    };
+  }
+
+  const trimmedRemarks = trimOrEmpty(remarks);
+  if (decision === "reject" && !trimmedRemarks) {
+    return { error: "A rejection remark is required.", status: 400 };
+  }
+  if (trimmedRemarks.length > 500) {
+    return { error: "Remarks must be 500 characters or fewer.", status: 400 };
+  }
+
+  const newStatusId = decision === "reject" ? STATUS_REJECTED : STATUS_BEING_PROCESS;
+  const newStatus = decision === "reject" ? "rejected" : "being_process";
+  const auditRemarks =
+    decision === "reject" ? trimmedRemarks : trimmedRemarks || "Recommended by HOD";
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(`UPDATE requisitions SET status_id = ? WHERE id = ?`, [newStatusId, requisitionId]);
+
+    await conn.execute(
+      `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
+       VALUES (?, ?, ?, ?, ?)`,
+      [requisitionId, reviewerStaffId, row.status_id, newStatusId, auditRemarks],
+    );
+
+    await conn.commit();
+    return { requisitionId, statusId: newStatusId, status: newStatus };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 function buildHistoryPhaseFilter(phaseFilter) {
@@ -797,6 +1058,116 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       return res.json(result);
     } catch (err) {
       console.error("Requisition history error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/hod/review-queue", generalLimiter, requireHod, async (req, res) => {
+    try {
+      const result = await queryHodReviewQueue(pool, req.session.user.departmentId);
+      return res.json(result);
+    } catch (err) {
+      console.error("HOD review queue error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/:requisitionId/hod-review", generalLimiter, requireHod, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const detail = await queryHodReviewDetail(pool, requisitionId, req.session.user.departmentId);
+      if (!detail) {
+        return res.status(404).json({ error: "Requisition not found in your department." });
+      }
+      return res.json(detail);
+    } catch (err) {
+      console.error("HOD review detail error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get(
+    "/requisitions/:requisitionId/documents/:documentIndex",
+    generalLimiter,
+    requireHod,
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      const documentIndex = Number.parseInt(String(req.params.documentIndex ?? ""), 10);
+
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+      if (!Number.isFinite(documentIndex) || documentIndex < 0 || documentIndex > 2) {
+        return res.status(400).json({ error: "Invalid document index." });
+      }
+
+      try {
+        const absolutePath = await fetchHodRequisitionDocumentPath(
+          pool,
+          requisitionId,
+          req.session.user.departmentId,
+          documentIndex,
+        );
+
+        if (!absolutePath || !fs.existsSync(absolutePath)) {
+          return res.status(404).json({ error: "Document not found." });
+        }
+
+        res.setHeader("Content-Type", mimeTypeForDocument(absolutePath));
+        res.setHeader("Content-Disposition", `inline; filename="${documentNameFromPath(absolutePath)}"`);
+        return res.sendFile(absolutePath);
+      } catch (err) {
+        console.error("HOD document download error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
+
+  apiRouter.post("/requisitions/:requisitionId/hod-review", generalLimiter, requireHod, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    const decision = String(req.body?.decision ?? "").trim().toLowerCase();
+    if (decision !== "recommend" && decision !== "reject") {
+      return res.status(400).json({ error: 'Decision must be "recommend" or "reject".' });
+    }
+
+    const remarks = req.body?.remarks;
+
+    try {
+      const result = await hodReviewRequisition(pool, {
+        requisitionId,
+        departmentId: req.session.user.departmentId,
+        reviewerStaffId: req.session.user.staffId,
+        decision,
+        remarks,
+      });
+
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      return res.json({
+        requisitionId: result.requisitionId,
+        statusId: result.statusId,
+        status: result.status,
+        message:
+          decision === "reject"
+            ? "Requisition rejected."
+            : "Requisition recommended to the next step.",
+      });
+    } catch (err) {
+      console.error("HOD review error:", err);
       const mapped = mapRequisitionDbError(err);
       return res.status(mapped.status).json({ error: mapped.error });
     }

@@ -14,14 +14,16 @@ const STATUS_SAVE_DRAFT = 1;
 const STATUS_SUBMITTED = 2;
 const STATUS_BEING_PROCESS = 3;
 const STATUS_REJECTED = 6;
+const STATUS_REJECTED_HOD = 9;
 const HOD_ROLE_ID = 3;
+const EDITABLE_STATUSES = new Set(["save_draft", "rejected_hod"]);
 
 const HISTORY_PHASES = ["draft", "pre_training", "post_training", "completed", "rejected"];
 
 const WORKFLOW_PHASE_SQL = `
   CASE
     WHEN rs.details = 'save_draft' THEN 'draft'
-    WHEN rs.details = 'rejected' THEN 'rejected'
+    WHEN rs.details IN ('rejected', 'rejected_hod', 'rejected_hr') THEN 'rejected'
     WHEN rs.details IN ('submitted', 'being_process', 'verified') THEN 'pre_training'
     WHEN rs.details = 'approved' AND (
       COALESCE(pt.cpd_points_counted, 0) = 1
@@ -69,7 +71,7 @@ function statusGroupFromDb(status) {
   if (status === "submitted") return "submitted";
   if (status === "being_process" || status === "verified") return "pending";
   if (status === "approved") return "approved";
-  if (status === "rejected") return "rejected";
+  if (status === "rejected" || status === "rejected_hod" || status === "rejected_hr") return "rejected";
   return "submitted";
 }
 
@@ -308,8 +310,8 @@ async function hodReviewRequisition(pool, { requisitionId, departmentId, reviewe
     return { error: "Remarks must be 500 characters or fewer.", status: 400 };
   }
 
-  const newStatusId = decision === "reject" ? STATUS_REJECTED : STATUS_BEING_PROCESS;
-  const newStatus = decision === "reject" ? "rejected" : "being_process";
+  const newStatusId = decision === "reject" ? STATUS_REJECTED_HOD : STATUS_BEING_PROCESS;
+  const newStatus = decision === "reject" ? "rejected_hod" : "being_process";
   const auditRemarks =
     decision === "reject" ? trimmedRemarks : trimmedRemarks || "Recommended by HOD";
 
@@ -418,7 +420,7 @@ function programmeSlotSqlValues(slots) {
 
 function deriveWorkflowPhase(status, row) {
   if (status === "save_draft") return "draft";
-  if (status === "rejected") return "rejected";
+  if (status === "rejected" || status === "rejected_hod" || status === "rejected_hr") return "rejected";
   if (status === "submitted" || status === "being_process" || status === "verified") {
     return "pre_training";
   }
@@ -474,6 +476,7 @@ function mapHistoryRow(row) {
     staffEmail: row.staff_email,
     departmentName: row.department_name ?? null,
     hrdcClaimable: Number(row.HRDC_claimable ?? 0) === 1,
+    rejectionRemarks: row.rejection_remarks ?? null,
     postTraining: {
       attendanceAttached,
       eSurveyFilled,
@@ -570,12 +573,17 @@ async function queryRequisitionHistory(pool, { user, phaseFilter, page, pageSize
             rd.date_4, rd.time_4, rd.time_to_4,
             rd.date_5, rd.time_5, rd.time_to_5,
             pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled,
-            pt.cpd_points_counted, pt.cpd_points
+            pt.cpd_points_counted, pt.cpd_points,
+            (SELECT al.remarks
+             FROM requisition_audit_log al
+             WHERE al.requisition_id = r.id AND al.new_status_id = ?
+             ORDER BY al.created_at DESC
+             LIMIT 1) AS rejection_remarks
      ${HISTORY_FROM_JOINS}
      WHERE ${whereSql}
      ORDER BY r.updated_at DESC
      LIMIT ${pageSize} OFFSET ${offset}`,
-    whereParams,
+    [STATUS_REJECTED_HOD, ...whereParams],
   );
 
   const summary = await queryHistorySummary(pool, user);
@@ -743,8 +751,11 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
   if (!existing) {
     return { error: "Requisition not found.", status: 404 };
   }
-  if (existing.status !== "save_draft") {
-    return { error: "Only draft requisitions can be edited.", status: 400 };
+  if (!EDITABLE_STATUSES.has(existing.status)) {
+    return { error: "This requisition cannot be edited.", status: 400 };
+  }
+  if (existing.status === "rejected_hod" && statusId === STATUS_SAVE_DRAFT) {
+    statusId = STATUS_REJECTED_HOD;
   }
 
   const category = trimOrEmpty(body?.category);
@@ -811,11 +822,14 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
       }
     }
 
+    const resubmitting = existing.status === "rejected_hod" && statusId === STATUS_SUBMITTED;
+
     await conn.execute(
       `UPDATE requisitions SET
         category = ?, justification = ?, title = ?, venue = ?, HRDC_claimable = ?,
         organiser = ?, contact_person = ?, address = ?, phone_num = ?, email = ?,
-        id_documents = ?, status_id = ?
+        id_documents = ?, status_id = ?,
+        recommended_by = CASE WHEN ? THEN NULL ELSE recommended_by END
        WHERE id = ?`,
       [
         category,
@@ -830,15 +844,17 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
         email,
         idDocuments,
         statusId,
+        resubmitting ? 1 : 0,
         requisitionId,
       ],
     );
 
     if (statusId !== existing.status_id) {
+      const auditRemarks = resubmitting ? "Resubmitted after HOD rejection" : null;
       await conn.execute(
         `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
-         VALUES (?, ?, ?, ?, NULL)`,
-        [requisitionId, staffId, existing.status_id, statusId],
+         VALUES (?, ?, ?, ?, ?)`,
+        [requisitionId, staffId, existing.status_id, statusId, auditRemarks],
       );
     }
 
@@ -853,6 +869,40 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
         /* ignore */
       }
     }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function resubmitRejectedRequisition(pool, { requisitionId, staffId }) {
+  const existing = await fetchOwnedDraftRequisition(pool, requisitionId, staffId);
+  if (!existing) {
+    return { error: "Requisition not found.", status: 404 };
+  }
+  if (existing.status !== "rejected_hod") {
+    return { error: "Only HOD-rejected requisitions can be resubmitted.", status: 400 };
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
+      `UPDATE requisitions SET status_id = ?, recommended_by = NULL WHERE id = ?`,
+      [STATUS_SUBMITTED, requisitionId],
+    );
+
+    await conn.execute(
+      `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
+       VALUES (?, ?, ?, ?, ?)`,
+      [requisitionId, staffId, existing.status_id, STATUS_SUBMITTED, "Resubmitted after HOD rejection"],
+    );
+
+    await conn.commit();
+    return { requisitionId, statusId: STATUS_SUBMITTED, status: "submitted" };
+  } catch (err) {
+    await conn.rollback();
     throw err;
   } finally {
     conn.release();
@@ -1210,8 +1260,8 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       if (!row) {
         return res.status(404).json({ error: "Requisition not found." });
       }
-      if (row.status !== "save_draft") {
-        return res.status(400).json({ error: "Only draft requisitions can be edited." });
+      if (!EDITABLE_STATUSES.has(row.status)) {
+        return res.status(400).json({ error: "This requisition cannot be edited." });
       }
 
       return res.json(mapRequisitionToForm(row));
@@ -1297,4 +1347,33 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       }
     },
   );
+
+  apiRouter.post("/requisitions/:requisitionId/resubmit", generalLimiter, requireAuth, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const result = await resubmitRejectedRequisition(pool, {
+        requisitionId,
+        staffId: req.session.user.staffId,
+      });
+
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      return res.json({
+        requisitionId: result.requisitionId,
+        statusId: result.statusId,
+        status: result.status,
+        message: "Requisition resubmitted to your Head of Department.",
+      });
+    } catch (err) {
+      console.error("Resubmit requisition error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
 }

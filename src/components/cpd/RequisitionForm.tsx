@@ -46,8 +46,9 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
   const [isSaving, setIsSaving] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isLoadingDraft, setIsLoadingDraft] = React.useState(false);
+  const [loadedStatus, setLoadedStatus] = React.useState<string | null>(null);
 
-  const applyFormData = React.useCallback((data: RequisitionFormData & { existingDocuments?: string[] }) => {
+  const applyFormData = React.useCallback((data: RequisitionFormData & { existingDocuments?: string[]; status?: string }) => {
     setCategory(data.category);
     setJustification(data.justification);
     setProgrammeTitle(data.programmeTitle);
@@ -67,6 +68,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
     setBudgetFees("");
     setEvidenceFiles([]);
     setExistingDocuments(data.existingDocuments ?? []);
+    setLoadedStatus(data.status ?? null);
   }, []);
 
   React.useEffect(() => {
@@ -132,6 +134,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
       budgetOthers: "",
       existingDocuments: [],
     });
+    setLoadedStatus(null);
     onEditIdChange?.(null);
   };
 
@@ -163,14 +166,23 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
   }, [budgetAccommodation, budgetFees, budgetMileage, budgetOthers, budgetTravelFare]);
 
   const isBusy = isSaving || isSubmitting || isLoadingDraft;
+  const isRejectedHod = loadedStatus === "rejected_hod";
 
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle>{editId ? `Edit draft ${editId}` : "Requisition Form"}</CardTitle>
+        <CardTitle>
+          {editId
+            ? isRejectedHod
+              ? `Revise rejected requisition ${editId}`
+              : `Edit draft ${editId}`
+            : "Requisition Form"}
+        </CardTitle>
         <CardDescription>
           {editId
-            ? "Update your saved draft and submit when ready."
+            ? isRejectedHod
+              ? "Update your requisition based on HOD feedback, then resubmit for review."
+              : "Update your saved draft and submit when ready."
             : "Fill in the details below to submit your requisition."}
         </CardDescription>
       </CardHeader>
@@ -275,12 +287,15 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="organiserName">Organiser</Label>
-                  <Input id="organiserName" value={organiserName} onChange={(e) => setOrganiserName(e.target.value)} />
+                  <Input id="organiserName" 
+                  placeholder="Organiser name" 
+                  value={organiserName} onChange={(e) => setOrganiserName(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="organiserContactPerson">Contact person</Label>
                   <Input
                     id="organiserContactPerson"
+                    placeholder="Contact person"
                     value={organiserContactPerson}
                     onChange={(e) => setOrganiserContactPerson(e.target.value)}
                   />
@@ -289,18 +304,19 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                   <Label htmlFor="organiserAddress">Address</Label>
                   <Textarea
                     id="organiserAddress"
+                    placeholder="Organiser address"
                     value={organiserAddress}
                     onChange={(e) => setOrganiserAddress(e.target.value)}
                     className="min-h-24"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="organiserPhone">Phone num</Label>
-                  <Input id="organiserPhone" type="tel" value={organiserPhone} onChange={(e) => setOrganiserPhone(e.target.value)} />
+                  <Label htmlFor="organiserPhone">Phone number</Label>
+                  <Input id="organiserPhone" type="tel" placeholder="Phone number" value={organiserPhone} onChange={(e) => setOrganiserPhone(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="organiserEmail">Email</Label>
-                  <Input id="organiserEmail" type="email" value={organiserEmail} onChange={(e) => setOrganiserEmail(e.target.value)} />
+                  <Input id="organiserEmail" type="email" placeholder="Organiser email" value={organiserEmail} onChange={(e) => setOrganiserEmail(e.target.value)} />
                 </div>
               </div>
             </section>
@@ -386,22 +402,26 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
             </section>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              <Button type="button" variant="secondary" onClick={() => void saveRequisition("draft")} disabled={isBusy}>
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  "Save as Draft"
-                )}
-              </Button>
+              {!isRejectedHod ? (
+                <Button type="button" variant="secondary" onClick={() => void saveRequisition("draft")} disabled={isBusy}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save as Draft"
+                  )}
+                </Button>
+              ) : null}
               <Button type="submit" disabled={isBusy}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Submitting…
+                    {isRejectedHod ? "Resubmitting…" : "Submitting…"}
                   </>
+                ) : isRejectedHod ? (
+                  "Resubmit to HOD"
                 ) : (
                   "Submit"
                 )}

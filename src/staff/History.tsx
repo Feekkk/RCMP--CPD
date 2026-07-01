@@ -20,7 +20,7 @@ export function History() {
           </div>
 
           <RequisitionHistoryPanel
-            description="Your requisitions — expand a row for approval progress and post-training checklist."
+            description="Your requisitions — expand a row for approval progress. Rejected items show HOD remarks with options to edit and resubmit."
             showBudget
             editPath="/staff/requisition"
             pageSize={100}

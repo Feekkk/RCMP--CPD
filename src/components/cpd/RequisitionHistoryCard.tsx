@@ -1,19 +1,23 @@
 import * as React from "react";
-import { CalendarDays, ChevronDown, Pencil } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, ChevronDown, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { PostTrainingChecklist } from "@/components/cpd/PostTrainingChecklist";
 import { PreTrainingStepper } from "@/components/cpd/PreTrainingStepper";
 import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { RequisitionHistoryItem } from "@/lib/requisitionsApi";
+import { resubmitRequisition, type RequisitionHistoryItem } from "@/lib/requisitionsApi";
 import {
   formatHistoryDate,
   formatProgrammeDates,
   isTrainingPast,
   preTrainingSteps,
+  statusDetailLabel,
   TRAFFIC_LIGHT_STYLES,
   workflowPhaseTrafficLight,
 } from "@/lib/requisitionStatus";
@@ -30,8 +34,10 @@ export function RequisitionHistoryCard({
   showBudget = false,
   editPath = "/staff/requisition",
 }: RequisitionHistoryCardProps) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const isDraft = item.workflowPhase === "draft" || item.status === "save_draft";
+  const isHodRejected = item.status === "rejected_hod";
   const trainingPast = isTrainingPast(item.programmeDates);
   const showPostTraining =
     item.workflowPhase === "post_training" ||
@@ -39,6 +45,18 @@ export function RequisitionHistoryCard({
     (item.statusGroup === "approved" && trainingPast);
   const postLocked = item.statusGroup === "approved" && !trainingPast && item.workflowPhase === "pre_training";
   const phaseStyles = TRAFFIC_LIGHT_STYLES[workflowPhaseTrafficLight(item.workflowPhase)];
+
+  const resubmitMutation = useMutation({
+    mutationFn: () => resubmitRequisition(item.requisitionId),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: ["requisitions", "history"] });
+      queryClient.invalidateQueries({ queryKey: ["requisitions", "mine"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Unable to resubmit requisition.");
+    },
+  });
 
   return (
     <Card className={cn("overflow-hidden border-l-4", phaseStyles.cardAccent)}>
@@ -60,9 +78,17 @@ export function RequisitionHistoryCard({
                 <div className="min-w-0">
                   <p className="truncate font-medium leading-snug">{item.title || "Untitled programme"}</p>
                   <p className="text-xs text-muted-foreground">{item.id}</p>
+                  {isHodRejected && item.rejectionRemarks && !open ? (
+                    <p className="mt-1 line-clamp-1 text-xs text-red-700 dark:text-red-300">
+                      HOD remarks: {item.rejectionRemarks}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2 sm:justify-end">
-                  <RequisitionStatusBadge statusGroup={item.statusGroup} />
+                  <RequisitionStatusBadge
+                    statusGroup={item.statusGroup}
+                    label={statusDetailLabel(item.status)}
+                  />
                 </div>
                 <div className="text-sm text-muted-foreground sm:text-right">
                   <p className="text-xs uppercase tracking-wide">Submitted</p>
@@ -83,6 +109,7 @@ export function RequisitionHistoryCard({
             <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" asChild>
               <Link to={`${editPath}?edit=${item.requisitionId}`}>
                 <Pencil className="h-3.5 w-3.5" />
+                Edit
               </Link>
             </Button>
           ) : null}
@@ -90,6 +117,13 @@ export function RequisitionHistoryCard({
 
         <CollapsibleContent>
           <div className="grid gap-4 border-t bg-muted/10 px-4 pb-4 pt-4">
+            {isHodRejected && item.rejectionRemarks ? (
+              <Alert variant="destructive" className="border-red-500/40 bg-red-500/5">
+                <AlertTitle>Rejection remarks from HOD</AlertTitle>
+                <AlertDescription className="whitespace-pre-wrap">{item.rejectionRemarks}</AlertDescription>
+              </Alert>
+            ) : null}
+
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="capitalize">Category: {item.category}</span>
               {item.venue ? <span>Venue: {item.venue}</span> : null}
@@ -113,6 +147,30 @@ export function RequisitionHistoryCard({
               {item.departmentName ? <p>Department: {item.departmentName}</p> : null}
               <p>HRDC claimable: {item.hrdcClaimable ? "Yes" : "No"}</p>
             </div>
+
+            {isHodRejected ? (
+              <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" className="gap-1.5" asChild>
+                  <Link to={`${editPath}?edit=${item.requisitionId}`}>
+                    <Pencil className="h-4 w-4" />
+                    Edit requisition
+                  </Link>
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-1.5"
+                  disabled={resubmitMutation.isPending}
+                  onClick={() => resubmitMutation.mutate()}
+                >
+                  {resubmitMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                  Resubmit to HOD
+                </Button>
+              </div>
+            ) : null}
           </div>
         </CollapsibleContent>
       </Collapsible>

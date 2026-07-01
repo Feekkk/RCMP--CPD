@@ -71,6 +71,7 @@ export type RequisitionHistoryItem = {
   staffEmail: string;
   departmentName: string | null;
   hrdcClaimable: boolean;
+  rejectionRemarks: string | null;
   postTraining: PostTrainingInfo;
 };
 
@@ -292,4 +293,17 @@ export async function submitHodReview(
   }
 
   return res.json() as Promise<HodReviewResponse>;
+}
+
+export async function resubmitRequisition(requisitionId: number): Promise<CreateRequisitionResponse> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/resubmit`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to resubmit requisition."));
+  }
+
+  return res.json() as Promise<CreateRequisitionResponse>;
 }

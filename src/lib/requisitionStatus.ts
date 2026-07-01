@@ -135,9 +135,24 @@ export function statusGroupFromDb(status: string): HistoryStatusGroup {
     case "approved":
       return "approved";
     case "rejected":
+    case "rejected_hod":
+    case "rejected_hr":
       return "rejected";
     default:
       return "submitted";
+  }
+}
+
+export function statusDetailLabel(status: string): string {
+  switch (status) {
+    case "rejected_hod":
+      return "Rejected by HOD";
+    case "rejected_hr":
+      return "Rejected by HR";
+    case "rejected":
+      return "Rejected";
+    default:
+      return statusGroupLabel(statusGroupFromDb(status));
   }
 }
 
@@ -191,11 +206,19 @@ export function preTrainingSteps(status: string): PreTrainingStep[] {
     return labels.map((label, i) => ({ key: keys[i], label, state: "upcoming" as const }));
   }
 
-  if (status === "rejected") {
+  if (status === "rejected" || status === "rejected_hr") {
     return labels.map((label, i) => ({
       key: keys[i],
       label,
       state: (i === 0 ? "complete" : "rejected") as PreTrainingStep["state"],
+    }));
+  }
+
+  if (status === "rejected_hod") {
+    return labels.map((label, i) => ({
+      key: keys[i],
+      label,
+      state: (i === 0 ? "complete" : i === 1 ? "rejected" : "upcoming") as PreTrainingStep["state"],
     }));
   }
 

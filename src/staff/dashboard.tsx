@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { CalendarCheck, CheckCircle2, ChevronDown, Clock, FileText, TrendingUp } from "lucide-react";
+import { CalendarCheck, CheckCircle2, ChevronDown, Clock, FileText, Loader2, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { NeedActionCard } from "@/components/cpd/NeedActionCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
+import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,28 +15,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
-import { formatTodayDate } from "@/lib/requisitionStatus";
+import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export const StaffDashboardPage = () => {
-  const { data: requisitionData } = useQuery({
-    queryKey: ["requisitions", "history", "dashboard-summary"],
-    queryFn: () => fetchRequisitionHistory({ phase: "all", page: 1, pageSize: 1 }),
+  const { data: requisitionData, isLoading: isRecentLoading, isError: isRecentError } = useQuery({
+    queryKey: ["requisitions", "history", "dashboard"],
+    queryFn: () => fetchRequisitionHistory({ phase: "all", page: 1, pageSize: 5 }),
   });
 
   const totalRequisitions = requisitionData?.summary?.all ?? 0;
+  const recentActivity = requisitionData?.requisitions ?? [];
 
   const stats = [
     { label: "Completed", value: "18h", icon: CheckCircle2, footnote: "Academic year 2025/2026" },
     { label: "Total Requisition", value: String(totalRequisitions), icon: FileText, footnote: "Submitted requisitions" },
     { label: "Remaining", value: "22h", icon: Clock, footnote: "Academic year 2025/2026" },
     { label: "This month", value: "+6h", icon: TrendingUp, footnote: "Academic year 2025/2026" },
-  ] as const;
-
-  const recent = [
-    { title: "Workshop: Active Learning Strategies", hours: 3, status: "Approved", date: "Apr 21, 2026" },
-    { title: "Conference: Teaching & Learning Symposium", hours: 6, status: "Pending", date: "Apr 11, 2026" },
-    { title: "Webinar: Research Supervision Updates", hours: 2, status: "Approved", date: "Mar 27, 2026" },
   ] as const;
 
   return (
@@ -98,28 +94,61 @@ export const StaffDashboardPage = () => {
               <NeedActionCard />
 
               <Card>
-                <CardHeader>
-                  <CardTitle>Recent activity</CardTitle>
-                  <CardDescription>Your latest CPD submissions and approvals.</CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                  <div>
+                    <CardTitle>Recent activity</CardTitle>
+                    <CardDescription>Your latest CPD submissions and approvals.</CardDescription>
+                  </div>
+                  {recentActivity.length > 0 ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="/staff/history">View all</Link>
+                    </Button>
+                  ) : null}
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-3">
-                    {recent.map((r) => (
-                      <div
-                        key={r.title}
-                        className="flex flex-col justify-between gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{r.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{r.date}</p>
+                  {isRecentLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : isRecentError ? (
+                    <p className="py-4 text-center text-sm text-destructive">Unable to load recent activity.</p>
+                  ) : recentActivity.length ? (
+                    <div className="grid gap-3">
+                      {recentActivity.map((item) => (
+                        <div
+                          key={item.requisitionId}
+                          className="flex flex-col justify-between gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{item.title}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {formatHistoryDate(item.submittedAt)} · {item.id}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <RequisitionStatusBadge
+                              statusGroup={item.statusGroup}
+                              label={statusDetailLabel(item.status)}
+                            />
+                            {item.postTraining.cpdPoints != null ? (
+                              <Badge variant="secondary">{item.postTraining.cpdPoints} pts</Badge>
+                            ) : (
+                              <p className="max-w-[140px] truncate text-right text-sm text-muted-foreground">
+                                {item.category}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <Badge variant={r.status === "Approved" ? "default" : "secondary"}>{r.status}</Badge>
-                          <p className="w-16 text-right font-semibold">{r.hours}h</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      No requisitions yet.{" "}
+                      <Link to="/staff/requisition" className="font-medium text-primary underline-offset-4 hover:underline">
+                        Create your first requisition
+                      </Link>
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>

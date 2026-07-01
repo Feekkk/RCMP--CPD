@@ -14,9 +14,15 @@ type PostTrainingChecklistProps = {
   postTraining: PostTrainingInfo;
   locked?: boolean;
   compact?: boolean;
+  neutralStyle?: boolean;
 };
 
-export function PostTrainingChecklist({ postTraining, locked = false, compact = false }: PostTrainingChecklistProps) {
+export function PostTrainingChecklist({
+  postTraining,
+  locked = false,
+  compact = false,
+  neutralStyle = false,
+}: PostTrainingChecklistProps) {
   const allDone = postTraining.isComplete;
   const progressLight =
     allDone && postTraining.cpdPointsCounted
@@ -27,13 +33,15 @@ export function PostTrainingChecklist({ postTraining, locked = false, compact = 
           ? "yellow"
           : "yellow";
 
-  const headerStyles = TRAFFIC_LIGHT_STYLES[progressLight];
+  const headerStyles = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[progressLight];
 
   return (
     <div className={cn("grid gap-2 rounded-lg border p-3", headerStyles.border, headerStyles.bg, compact ? "gap-1.5" : "gap-2")}>
       <div className="flex items-center justify-between gap-2">
         <p className={cn("flex items-center gap-2 text-xs font-semibold uppercase tracking-wide", headerStyles.text)}>
-          <span className={cn("h-2 w-2 rounded-full", headerStyles.dot)} aria-hidden />
+          {!neutralStyle ? (
+            <span className={cn("h-2 w-2 rounded-full", headerStyles.dot)} aria-hidden />
+          ) : null}
           Post-training
         </p>
         <span className={cn("text-xs font-semibold tabular-nums", headerStyles.text)}>
@@ -45,7 +53,7 @@ export function PostTrainingChecklist({ postTraining, locked = false, compact = 
         {STEPS.map(({ key, label, icon: Icon }) => {
           const done = postTraining[key];
           const itemLight = done ? "green" : locked ? "neutral" : "yellow";
-          const itemStyles = TRAFFIC_LIGHT_STYLES[itemLight];
+          const itemStyles = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[itemLight];
 
           return (
             <div
@@ -60,7 +68,11 @@ export function PostTrainingChecklist({ postTraining, locked = false, compact = 
               <span
                 className={cn(
                   "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                  done ? cn(itemStyles.dot, "text-white") : cn("border", itemStyles.border, itemStyles.bg),
+                  done
+                    ? neutralStyle
+                      ? "bg-foreground text-background"
+                      : cn(itemStyles.dot, "text-white")
+                    : cn("border", itemStyles.border, itemStyles.bg),
                 )}
               >
                 {done ? (
@@ -79,12 +91,13 @@ export function PostTrainingChecklist({ postTraining, locked = false, compact = 
         <div
           className={cn(
             "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-            TRAFFIC_LIGHT_STYLES.green.border,
-            TRAFFIC_LIGHT_STYLES.green.bg,
+            neutralStyle
+              ? "border-border bg-muted/30"
+              : cn(TRAFFIC_LIGHT_STYLES.green.border, TRAFFIC_LIGHT_STYLES.green.bg),
           )}
         >
-          <Star className={cn("h-4 w-4", TRAFFIC_LIGHT_STYLES.green.text)} />
-          <span className={cn("font-medium", TRAFFIC_LIGHT_STYLES.green.text)}>
+          <Star className={cn("h-4 w-4", neutralStyle ? "text-muted-foreground" : TRAFFIC_LIGHT_STYLES.green.text)} />
+          <span className={cn("font-medium", neutralStyle ? "text-foreground" : TRAFFIC_LIGHT_STYLES.green.text)}>
             CPD points recorded
             {postTraining.cpdPoints != null ? `: ${postTraining.cpdPoints}` : ""}
           </span>
@@ -92,7 +105,7 @@ export function PostTrainingChecklist({ postTraining, locked = false, compact = 
       ) : locked ? (
         <p className="text-xs text-muted-foreground">Available after the programme date.</p>
       ) : postTraining.completedSteps < postTraining.totalSteps ? (
-        <p className={cn("text-xs font-medium", TRAFFIC_LIGHT_STYLES.yellow.text)}>
+        <p className={cn("text-xs font-medium", neutralStyle ? "text-muted-foreground" : TRAFFIC_LIGHT_STYLES.yellow.text)}>
           Action needed — complete all checklist items to count CPD points.
         </p>
       ) : null}

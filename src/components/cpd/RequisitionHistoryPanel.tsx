@@ -52,6 +52,7 @@ type RequisitionHistoryPanelProps = {
   showBudget?: boolean;
   editPath?: string;
   pageSize?: number;
+  neutralStyle?: boolean;
 };
 
 export function RequisitionHistoryPanel({
@@ -59,6 +60,7 @@ export function RequisitionHistoryPanel({
   showBudget = false,
   editPath = "/staff/requisition",
   pageSize = 10,
+  neutralStyle = false,
 }: RequisitionHistoryPanelProps) {
   const [phaseFilter, setPhaseFilter] = React.useState<HistoryPhaseFilter>("all");
   const [page, setPage] = React.useState(1);
@@ -88,19 +90,24 @@ export function RequisitionHistoryPanel({
     phaseFilter !== "all" ? workflowPhaseDescription(phaseFilter as Exclude<HistoryPhaseFilter, "all">) : null;
 
   const activeHintLight = phaseFilter !== "all" ? phaseFilterTrafficLight(phaseFilter) : "neutral";
-  const activeHintStyles = TRAFFIC_LIGHT_STYLES[activeHintLight];
+  const activeHintStyles = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[activeHintLight];
+
+  const stylesFor = (light: keyof typeof TRAFFIC_LIGHT_STYLES) =>
+    neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[light];
 
   return (
     <div className="mt-6 grid gap-6">
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/20 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status key</p>
-        {LEGEND.map(({ light, label }) => (
-          <span key={light} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <span className={cn("h-2.5 w-2.5 rounded-full", TRAFFIC_LIGHT_STYLES[light].dot)} aria-hidden />
-            {label}
-          </span>
-        ))}
-      </div>
+      {!neutralStyle ? (
+        <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/20 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status key</p>
+          {LEGEND.map(({ light, label }) => (
+            <span key={light} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <span className={cn("h-2.5 w-2.5 rounded-full", TRAFFIC_LIGHT_STYLES[light].dot)} aria-hidden />
+              {label}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {summary ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -109,7 +116,7 @@ export function RequisitionHistoryPanel({
             const Icon = tab.icon;
             const active = phaseFilter === tab.value;
             const light = phaseFilterTrafficLight(tab.value);
-            const styles = TRAFFIC_LIGHT_STYLES[light];
+            const styles = stylesFor(light);
 
             return (
               <button
@@ -123,12 +130,14 @@ export function RequisitionHistoryPanel({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
-                    <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} aria-hidden />
-                    <Icon className={cn("h-4 w-4", active ? styles.text : "text-muted-foreground")} />
+                    {!neutralStyle ? (
+                      <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} aria-hidden />
+                    ) : null}
+                    <Icon className={cn("h-4 w-4", active ? "text-foreground" : "text-muted-foreground")} />
                   </span>
-                  <span className={cn("text-2xl font-bold tracking-tight", active && styles.text)}>{count}</span>
+                  <span className={cn("text-2xl font-bold tracking-tight", active && "text-foreground")}>{count}</span>
                 </div>
-                <p className={cn("mt-2 text-sm font-medium", active ? styles.text : "text-foreground")}>{tab.label}</p>
+                <p className={cn("mt-2 text-sm font-medium", active ? "text-foreground" : "text-foreground")}>{tab.label}</p>
               </button>
             );
           })}
@@ -145,21 +154,22 @@ export function RequisitionHistoryPanel({
             <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
               {PHASE_TABS.map((tab) => {
                 const light = phaseFilterTrafficLight(tab.value);
-                const styles = TRAFFIC_LIGHT_STYLES[light];
+                const styles = stylesFor(light);
                 return (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className={cn("gap-1.5 text-xs sm:text-sm", styles.tabActive)}
+                    className={cn("gap-1.5 text-xs sm:text-sm", !neutralStyle && styles.tabActive)}
                   >
-                    <span className={cn("h-2 w-2 rounded-full", styles.dot)} aria-hidden />
+                    {!neutralStyle ? (
+                      <span className={cn("h-2 w-2 rounded-full", styles.dot)} aria-hidden />
+                    ) : null}
                     {tab.label}
                     {summary && tab.summaryKey !== "all" ? (
                       <span
                         className={cn(
                           "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                          styles.bg,
-                          styles.text,
+                          neutralStyle ? "bg-muted text-muted-foreground" : cn(styles.bg, styles.text),
                         )}
                       >
                         {summary[tab.summaryKey as keyof typeof summary]}
@@ -179,12 +189,14 @@ export function RequisitionHistoryPanel({
             <p
               className={cn(
                 "rounded-lg border px-3 py-2 text-sm",
-                activeHintStyles.border,
-                activeHintStyles.bg,
-                activeHintStyles.text,
+                neutralStyle
+                  ? "border-border bg-muted/30 text-muted-foreground"
+                  : cn(activeHintStyles.border, activeHintStyles.bg, activeHintStyles.text),
               )}
             >
-              <span className={cn("mr-2 inline-block h-2 w-2 rounded-full align-middle", activeHintStyles.dot)} />
+              {!neutralStyle ? (
+                <span className={cn("mr-2 inline-block h-2 w-2 rounded-full align-middle", activeHintStyles.dot)} />
+              ) : null}
               {activePhaseHint}
             </p>
           ) : null}
@@ -210,6 +222,7 @@ export function RequisitionHistoryPanel({
                   item={row}
                   showBudget={showBudget}
                   editPath={editPath}
+                  neutralStyle={neutralStyle}
                 />
               ))}
             </div>

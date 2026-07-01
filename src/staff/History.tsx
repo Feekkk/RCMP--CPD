@@ -1,6 +1,6 @@
 import { History as HistoryIcon } from "lucide-react";
 
-import { RequisitionHistoryPanel } from "@/components/cpd/RequisitionHistoryPanel";
+import { RequisitionLogsPanel } from "@/components/cpd/RequisitionLogsPanel";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export function History() {
@@ -15,16 +15,11 @@ export function History() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Activity Log</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight">History</h1>
             </div>
           </div>
 
-          <RequisitionHistoryPanel
-            description="Your requisitions — expand a row for approval progress. Rejected items show HOD remarks with options to edit and resubmit."
-            showBudget
-            editPath="/staff/requisition"
-            pageSize={100}
-          />
+          <RequisitionLogsPanel />
         </div>
       </div>
     </main>

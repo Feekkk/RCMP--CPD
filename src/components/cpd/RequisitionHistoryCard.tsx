@@ -8,6 +8,7 @@ import { PostTrainingChecklist } from "@/components/cpd/PostTrainingChecklist";
 import { PreTrainingStepper } from "@/components/cpd/PreTrainingStepper";
 import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -27,12 +28,14 @@ type RequisitionHistoryCardProps = {
   item: RequisitionHistoryItem;
   showBudget?: boolean;
   editPath?: string;
+  neutralStyle?: boolean;
 };
 
 export function RequisitionHistoryCard({
   item,
   showBudget = false,
   editPath = "/staff/requisition",
+  neutralStyle = false,
 }: RequisitionHistoryCardProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = React.useState(false);
@@ -44,7 +47,9 @@ export function RequisitionHistoryCard({
     item.workflowPhase === "completed" ||
     (item.statusGroup === "approved" && trainingPast);
   const postLocked = item.statusGroup === "approved" && !trainingPast && item.workflowPhase === "pre_training";
-  const phaseStyles = TRAFFIC_LIGHT_STYLES[workflowPhaseTrafficLight(item.workflowPhase)];
+  const phaseStyles = neutralStyle
+    ? TRAFFIC_LIGHT_STYLES.neutral
+    : TRAFFIC_LIGHT_STYLES[workflowPhaseTrafficLight(item.workflowPhase)];
 
   const resubmitMutation = useMutation({
     mutationFn: () => resubmitRequisition(item.requisitionId),
@@ -59,7 +64,7 @@ export function RequisitionHistoryCard({
   });
 
   return (
-    <Card className={cn("overflow-hidden border-l-4", phaseStyles.cardAccent)}>
+    <Card className={cn("overflow-hidden", !neutralStyle && "border-l-4", !neutralStyle && phaseStyles.cardAccent)}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <CollapsibleTrigger asChild>
@@ -79,16 +84,20 @@ export function RequisitionHistoryCard({
                   <p className="truncate font-medium leading-snug">{item.title || "Untitled programme"}</p>
                   <p className="text-xs text-muted-foreground">{item.id}</p>
                   {isHodRejected && item.rejectionRemarks && !open ? (
-                    <p className="mt-1 line-clamp-1 text-xs text-red-700 dark:text-red-300">
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
                       HOD remarks: {item.rejectionRemarks}
                     </p>
                   ) : null}
                 </div>
                 <div className="flex items-center gap-2 sm:justify-end">
-                  <RequisitionStatusBadge
-                    statusGroup={item.statusGroup}
-                    label={statusDetailLabel(item.status)}
-                  />
+                  {neutralStyle ? (
+                    <Badge variant="outline">{statusDetailLabel(item.status)}</Badge>
+                  ) : (
+                    <RequisitionStatusBadge
+                      statusGroup={item.statusGroup}
+                      label={statusDetailLabel(item.status)}
+                    />
+                  )}
                 </div>
                 <div className="text-sm text-muted-foreground sm:text-right">
                   <p className="text-xs uppercase tracking-wide">Submitted</p>
@@ -118,7 +127,7 @@ export function RequisitionHistoryCard({
         <CollapsibleContent>
           <div className="grid gap-4 border-t bg-muted/10 px-4 pb-4 pt-4">
             {isHodRejected && item.rejectionRemarks ? (
-              <Alert variant="destructive" className="border-red-500/40 bg-red-500/5">
+              <Alert className="border-border bg-muted/30">
                 <AlertTitle>Rejection remarks from HOD</AlertTitle>
                 <AlertDescription className="whitespace-pre-wrap">{item.rejectionRemarks}</AlertDescription>
               </Alert>
@@ -131,16 +140,18 @@ export function RequisitionHistoryCard({
               <span>Updated {formatHistoryDate(item.updatedAt)}</span>
             </div>
 
-            <div className={cn("grid gap-2 rounded-lg border p-3", phaseStyles.border, "bg-background/80")}>
+            <div className={cn("grid gap-2 rounded-lg border border-border p-3", !neutralStyle && phaseStyles.border, "bg-background/80")}>
               <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <span className={cn("h-2 w-2 rounded-full", TRAFFIC_LIGHT_STYLES.yellow.dot)} aria-hidden />
+                {!neutralStyle ? (
+                  <span className={cn("h-2 w-2 rounded-full", TRAFFIC_LIGHT_STYLES.yellow.dot)} aria-hidden />
+                ) : null}
                 Pre-training approval
               </p>
-              <PreTrainingStepper steps={preTrainingSteps(item.status)} />
+              <PreTrainingStepper steps={preTrainingSteps(item.status)} neutralStyle={neutralStyle} />
             </div>
 
             {showPostTraining || postLocked ? (
-              <PostTrainingChecklist postTraining={item.postTraining} locked={postLocked} />
+              <PostTrainingChecklist postTraining={item.postTraining} locked={postLocked} neutralStyle={neutralStyle} />
             ) : null}
 
             <div className="grid gap-1 text-sm text-muted-foreground">

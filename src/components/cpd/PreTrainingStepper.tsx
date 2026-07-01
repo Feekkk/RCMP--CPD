@@ -16,30 +16,38 @@ function stepTrafficLight(state: PreTrainingStep["state"]) {
   }
 }
 
-export function PreTrainingStepper({ steps }: { steps: PreTrainingStep[] }) {
+export function PreTrainingStepper({
+  steps,
+  neutralStyle = false,
+}: {
+  steps: PreTrainingStep[];
+  neutralStyle?: boolean;
+}) {
   return (
     <ol className="flex flex-wrap items-center gap-1 sm:gap-0">
       {steps.map((step, idx) => {
-        const colors = stepTrafficLight(step.state);
+        const colors = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : stepTrafficLight(step.state);
         return (
           <li key={step.key} className="flex items-center">
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
-                  colors.border,
-                  step.state === "complete" && cn(colors.dot, "text-white"),
-                  step.state === "current" && colors.bg,
+                  neutralStyle ? "border-border bg-muted/40 text-muted-foreground" : colors.border,
+                  !neutralStyle && step.state === "complete" && cn(colors.dot, "text-white"),
+                  !neutralStyle && step.state === "current" && colors.bg,
                   step.state === "upcoming" && "border-muted-foreground/25 bg-muted/30 text-muted-foreground",
-                  step.state === "rejected" && colors.bg,
+                  !neutralStyle && step.state === "rejected" && colors.bg,
+                  neutralStyle && step.state === "complete" && "bg-foreground text-background",
+                  neutralStyle && step.state === "current" && "border-foreground bg-muted text-foreground",
                 )}
               >
                 {step.state === "complete" ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : step.state === "rejected" ? (
-                  <X className={cn("h-3.5 w-3.5", colors.text)} />
+                  <X className={cn("h-3.5 w-3.5", neutralStyle ? "text-muted-foreground" : colors.text)} />
                 ) : step.state === "current" ? (
-                  <Circle className={cn("h-2 w-2 fill-current", colors.text)} />
+                  <Circle className={cn("h-2 w-2 fill-current", neutralStyle ? "text-foreground" : colors.text)} />
                 ) : (
                   <span>{idx + 1}</span>
                 )}
@@ -47,10 +55,16 @@ export function PreTrainingStepper({ steps }: { steps: PreTrainingStep[] }) {
               <span
                 className={cn(
                   "text-xs font-medium",
-                  step.state === "complete" && TRAFFIC_LIGHT_STYLES.green.text,
-                  step.state === "current" && TRAFFIC_LIGHT_STYLES.yellow.text,
-                  step.state === "rejected" && TRAFFIC_LIGHT_STYLES.red.text,
-                  step.state === "upcoming" && "text-muted-foreground",
+                  neutralStyle
+                    ? step.state === "upcoming"
+                      ? "text-muted-foreground"
+                      : "text-foreground"
+                    : cn(
+                        step.state === "complete" && TRAFFIC_LIGHT_STYLES.green.text,
+                        step.state === "current" && TRAFFIC_LIGHT_STYLES.yellow.text,
+                        step.state === "rejected" && TRAFFIC_LIGHT_STYLES.red.text,
+                        step.state === "upcoming" && "text-muted-foreground",
+                      ),
                 )}
               >
                 {step.label}
@@ -60,7 +74,11 @@ export function PreTrainingStepper({ steps }: { steps: PreTrainingStep[] }) {
               <div
                 className={cn(
                   "mx-2 hidden h-0.5 w-6 sm:block md:w-10",
-                  step.state === "complete" ? TRAFFIC_LIGHT_STYLES.green.dot : "bg-border",
+                  step.state === "complete"
+                    ? neutralStyle
+                      ? "bg-foreground/30"
+                      : TRAFFIC_LIGHT_STYLES.green.dot
+                    : "bg-border",
                 )}
               />
             ) : null}

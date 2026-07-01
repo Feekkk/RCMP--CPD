@@ -1,18 +1,34 @@
-import { Award, CalendarCheck, CheckCircle2, Clock, FileText, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { CalendarCheck, CheckCircle2, ChevronDown, Clock, FileText, TrendingUp } from "lucide-react";
+import { Link } from "react-router-dom";
 
-import { CpdProgressOverviewCard, STAFF_PROGRESS_MOCK } from "@/components/cpd/CpdProgressOverviewCard";
+import { NeedActionCard } from "@/components/cpd/NeedActionCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export const StaffDashboardPage = () => {
+  const { data: requisitionData } = useQuery({
+    queryKey: ["requisitions", "history", "dashboard-summary"],
+    queryFn: () => fetchRequisitionHistory({ phase: "all", page: 1, pageSize: 1 }),
+  });
+
+  const totalRequisitions = requisitionData?.summary?.all ?? 0;
+
   const stats = [
-    { label: "CPD target", value: "40h", icon: Award },
-    { label: "Completed", value: "18h", icon: CheckCircle2 },
-    { label: "Remaining", value: "22h", icon: Clock },
-    { label: "This month", value: "+6h", icon: TrendingUp },
+    { label: "Completed", value: "18h", icon: CheckCircle2, footnote: "Academic year 2025/2026" },
+    { label: "Total Requisition", value: String(totalRequisitions), icon: FileText, footnote: "Submitted requisitions" },
+    { label: "Remaining", value: "22h", icon: Clock, footnote: "Academic year 2025/2026" },
+    { label: "This month", value: "+6h", icon: TrendingUp, footnote: "Academic year 2025/2026" },
   ] as const;
 
   const recent = [
@@ -37,10 +53,23 @@ export const StaffDashboardPage = () => {
                 <CalendarCheck className="h-4 w-4" />
                 Plan CPD
               </Button>
-              <Button>
-                <FileText className="h-4 w-4" />
-                New Requisition
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    <FileText className="h-4 w-4" />
+                    New Requisition
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link to="/staff/requisition">Make Requisition</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/staff/requisition/track">Track Requisition</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>
@@ -57,7 +86,7 @@ export const StaffDashboardPage = () => {
                 </CardHeader>
                 <CardContent>
                   <p className="font-display text-2xl font-bold">{s.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Academic year 2025/2026</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{s.footnote}</p>
                 </CardContent>
               </Card>
             ))}
@@ -65,10 +94,7 @@ export const StaffDashboardPage = () => {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 grid gap-4">
-              <CpdProgressOverviewCard
-                description="Stay on track toward the 40-hour annual requirement."
-                data={STAFF_PROGRESS_MOCK}
-              />
+              <NeedActionCard />
 
               <Card>
                 <CardHeader>

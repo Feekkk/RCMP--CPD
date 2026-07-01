@@ -8,6 +8,7 @@ import Login from "./pages/login.tsx";
 import { StaffDashboardPage } from "./staff/dashboard.tsx";
 import { History } from "./staff/History.tsx";
 import { Requisition } from "./staff/Requisition.tsx";
+import { TrackRequisition } from "./staff/TrackRequisition.tsx";
 import { Settings } from "./staff/Settings.tsx";
 import { AdminDashboardPage } from "./admin/Dashboard.tsx";
 import { AdminHistoryPage } from "./admin/History.tsx";
@@ -38,6 +39,7 @@ const App = () => (
           {/* Staff Routes */}
           <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
           <Route path="/staff/requisition" element={<Requisition />} />
+          <Route path="/staff/requisition/track" element={<TrackRequisition />} />
           <Route path="/staff/history" element={<History />} />
           <Route path="/staff/settings" element={<Settings />} />
 

@@ -1,6 +1,5 @@
-import * as React from "react";
-import { FileText } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { FileSearch } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { RequisitionForm } from "@/components/cpd/RequisitionForm";
 import { Button } from "@/components/ui/button";
@@ -30,9 +29,11 @@ export function Requisition() {
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
               <h1 className="font-display text-2xl font-bold tracking-tight">Requisition</h1>
             </div>
-            <Button type="button" onClick={() => handleEditIdChange(null)}>
-              <FileText className="h-4 w-4" />
-              New Requisition
+            <Button asChild>
+              <Link to="/staff/requisition/track">
+                <FileSearch className="h-4 w-4" />
+                Track Requisition
+              </Link>
             </Button>
           </div>
 

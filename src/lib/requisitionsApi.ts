@@ -230,6 +230,51 @@ export async function fetchMyRequisitions(): Promise<MyRequisitionSummary[]> {
   return data.requisitions;
 }
 
+export type RequisitionLogEntry = {
+  logId: number;
+  requisitionId: number;
+  requisitionTitle: string;
+  venue: string;
+  submittedAt: string;
+  changedAt: string;
+  oldStatus: string | null;
+  newStatus: string;
+  remarks: string | null;
+  changedByName: string;
+  changedByEmail: string;
+};
+
+export type RequisitionLogsResponse = {
+  logs: RequisitionLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export async function fetchRequisitionLogs({
+  page = 1,
+  pageSize = 20,
+}: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<RequisitionLogsResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  const res = await fetch(`/api/requisitions/logs?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load requisition logs."));
+  }
+
+  return res.json() as Promise<RequisitionLogsResponse>;
+}
+
 export async function fetchRequisitionHistory({
   phase = "all",
   page = 1,

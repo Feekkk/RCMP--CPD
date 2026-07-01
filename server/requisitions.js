@@ -598,6 +598,63 @@ async function queryRequisitionHistory(pool, { user, phaseFilter, page, pageSize
   };
 }
 
+function mapAuditLogRow(row) {
+  return {
+    logId: row.id,
+    requisitionId: row.requisition_id,
+    requisitionTitle: row.title,
+    venue: row.venue,
+    submittedAt: row.submitted_at,
+    changedAt: row.created_at,
+    oldStatus: row.old_status ?? null,
+    newStatus: row.new_status,
+    remarks: row.remarks ?? null,
+    changedByName: displayNameFromEmail(row.changed_by_email),
+    changedByEmail: row.changed_by_email,
+  };
+}
+
+async function queryRequisitionAuditLogs(pool, { user, page, pageSize }) {
+  const scope = buildHistoryScope(user);
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     FROM requisition_audit_log al
+     INNER JOIN requisitions r ON r.id = al.requisition_id
+     WHERE ${scope.clause}`,
+    scope.params,
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+
+  const [rows] = await pool.execute(
+    `SELECT al.id, al.requisition_id, al.created_at, al.remarks,
+            r.title, r.venue, r.created_at AS submitted_at,
+            old_rs.details AS old_status,
+            new_rs.details AS new_status,
+            changer.email AS changed_by_email
+     FROM requisition_audit_log al
+     INNER JOIN requisitions r ON r.id = al.requisition_id
+     LEFT JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+     INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+     INNER JOIN staff changer ON changer.id = al.changed_by
+     WHERE ${scope.clause}
+     ORDER BY al.created_at DESC
+     LIMIT ${pageSize} OFFSET ${offset}`,
+    scope.params,
+  );
+
+  return {
+    logs: rows.map(mapAuditLogRow),
+    total,
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -1113,6 +1170,51 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     }
   });
 
+  apiRouter.get("/requisitions/logs", generalLimiter, requireAuth, async (req, res) => {
+    try {
+      const page = parsePositiveInt(req.query.page, 1);
+      const pageSize = Math.min(parsePositiveInt(req.query.pageSize, 20) ?? 20, 100);
+
+      const result = await queryRequisitionAuditLogs(pool, {
+        user: req.session.user,
+        page,
+        pageSize,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      console.error("Requisition logs error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/mine", generalLimiter, requireAuth, async (req, res) => {
+    try {
+      const result = await queryRequisitionHistory(pool, {
+        user: req.session.user,
+        phaseFilter: "all",
+        page: 1,
+        pageSize: 100,
+      });
+
+      return res.json({
+        requisitions: result.requisitions.map((row) => ({
+          requisitionId: row.requisitionId,
+          category: row.category,
+          title: row.title,
+          status: row.status,
+          createdAt: row.submittedAt,
+          updatedAt: row.updatedAt,
+        })),
+      });
+    } catch (err) {
+      console.error("List requisitions error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
   apiRouter.get("/requisitions/hod/review-queue", generalLimiter, requireHod, async (req, res) => {
     try {
       const result = await queryHodReviewQueue(pool, req.session.user.departmentId);
@@ -1218,32 +1320,6 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       });
     } catch (err) {
       console.error("HOD review error:", err);
-      const mapped = mapRequisitionDbError(err);
-      return res.status(mapped.status).json({ error: mapped.error });
-    }
-  });
-
-  apiRouter.get("/requisitions/mine", generalLimiter, requireAuth, async (req, res) => {
-    try {
-      const result = await queryRequisitionHistory(pool, {
-        user: req.session.user,
-        phaseFilter: "all",
-        page: 1,
-        pageSize: 100,
-      });
-
-      return res.json({
-        requisitions: result.requisitions.map((row) => ({
-          requisitionId: row.requisitionId,
-          category: row.category,
-          title: row.title,
-          status: row.status,
-          createdAt: row.submittedAt,
-          updatedAt: row.updatedAt,
-        })),
-      });
-    } catch (err) {
-      console.error("List requisitions error:", err);
       const mapped = mapRequisitionDbError(err);
       return res.status(mapped.status).json({ error: mapped.error });
     }

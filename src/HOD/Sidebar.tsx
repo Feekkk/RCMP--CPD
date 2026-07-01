@@ -21,7 +21,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex items-center gap-3 border-b px-6 py-5">
           <img src="/unikl-rcmp.png" alt="logo" width={40} height={40} className="h-18 w-20 object-contain" />
           <div className="leading-tight">
-            <p className="font-display text-sm font-bold text-foreground">CPD Portal</p>
+            <p className="font-display text-sm font-bold text-foreground">HCD Portal</p>
             <p className="text-xs font-medium text-muted-foreground">Head of Department</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export function HODSidebar() {
         </Sheet>
         <div className="flex items-center gap-2">
           <img src="/unikl-rcmp.png" alt="logo" className="h-9 w-9 object-contain" />
-          <p className="font-display text-sm font-bold">CPD Portal</p>
+          <p className="font-display text-sm font-bold">HCD Portal</p>
         </div>
         <div className="w-9" />
       </div>

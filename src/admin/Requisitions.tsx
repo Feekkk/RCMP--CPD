@@ -29,9 +29,14 @@ export function AdminRequisitionsPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Admin</p>
               <h1 className="font-display text-2xl font-bold tracking-tight">Requisitions</h1>
             </div>
-            <Button type="button" onClick={() => handleEditIdChange(null)}>
-              <FileText className="h-4 w-4" />
-              New Requisition
+            <Button
+              type="button"
+              asChild
+            >
+              <a href="/admin/history">
+                <FileText className="h-4 w-4" />
+                My Requisitions
+              </a>
             </Button>
           </div>
 

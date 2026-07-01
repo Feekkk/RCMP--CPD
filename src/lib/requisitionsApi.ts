@@ -160,6 +160,28 @@ export type HodReviewResponse = {
   message: string;
 };
 
+export type HodRecommendation = {
+  name: string;
+  email: string;
+  recommendedAt: string;
+  remarks: string | null;
+};
+
+export type AdminVerifyQueueItem = Omit<HodReviewQueueItem, "hodStatus"> & {
+  hodRecommendation: HodRecommendation | null;
+};
+
+export type AdminVerifyQueueResponse = {
+  requisitions: AdminVerifyQueueItem[];
+  summary: {
+    total: number;
+  };
+};
+
+export type AdminVerifyDecision = "verify" | "reject";
+
+export type AdminVerifyResponse = HodReviewResponse;
+
 async function parseApiError(res: Response, fallback: string) {
   const data = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
   return [data.error, data.hint].filter(Boolean).join(" ") || fallback;
@@ -338,6 +360,45 @@ export async function submitHodReview(
   }
 
   return res.json() as Promise<HodReviewResponse>;
+}
+
+export async function fetchAdminVerifyQueue(): Promise<AdminVerifyQueueResponse> {
+  const res = await fetch("/api/requisitions/admin/verify-queue", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load verify queue."));
+  }
+
+  return res.json() as Promise<AdminVerifyQueueResponse>;
+}
+
+export async function fetchAdminVerifyDetail(requisitionId: number): Promise<AdminVerifyQueueItem> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/admin-verify`, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load requisition details."));
+  }
+
+  return res.json() as Promise<AdminVerifyQueueItem>;
+}
+
+export async function submitAdminVerify(
+  requisitionId: number,
+  decision: AdminVerifyDecision,
+  remarks?: string,
+): Promise<AdminVerifyResponse> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/admin-verify`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision, remarks }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to submit verification."));
+  }
+
+  return res.json() as Promise<AdminVerifyResponse>;
 }
 
 export async function resubmitRequisition(requisitionId: number): Promise<CreateRequisitionResponse> {

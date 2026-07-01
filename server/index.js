@@ -76,7 +76,7 @@ const pool = mysql.createPool({
 
 const HOD_ROLE_ID = 3;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
-const API_BUILD = 9;
+const API_BUILD = 10;
 
 function dashboardPathForRole(roleId) {
   switch (roleId) {

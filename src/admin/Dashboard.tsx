@@ -1,12 +1,20 @@
-import { CheckCircle2, Clock, FileText, LayoutDashboard, TrendingUp, Users } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, FileText, History, LayoutDashboard, TrendingUp, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { ADMIN_PROGRESS_MOCK, CpdProgressOverviewCard } from "@/components/cpd/CpdProgressOverviewCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminSidebar } from "@/admin/Sidebar";
+import { formatTodayDate } from "@/lib/requisitionStatus";
 
 export const AdminDashboardPage = () => {
   const stats = [
@@ -27,23 +35,41 @@ export const AdminDashboardPage = () => {
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <AdminSidebar />
-
       <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
         <header className="sticky top-14 z-10 md:top-0 border-b bg-background/80 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Admin</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{formatTodayDate()}</p>
+              <h1 className="font-display text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" className="hidden sm:inline-flex">
                 <Users className="h-4 w-4" />
                 Manage users
               </Button>
-              <Button>
-                <FileText className="h-4 w-4" />
-                Review requisitions
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    <FileText className="h-4 w-4" />
+                     Requisitions
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin/requisitions" className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Make Requisitions
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin/history" className="flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      Activity Log
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

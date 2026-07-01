@@ -16,6 +16,7 @@ import { AdminReportPage } from "./admin/Report.tsx";
 import { AdminRequisitionsPage } from "./admin/Requisitions.tsx";
 import { AdminSettingsPage } from "./admin/Settings.tsx";
 import { AdminUsersPage } from "./admin/Users.tsx";
+import { AdminVerifyRequisitionPage } from "./admin/ReviewReq.tsx";
 import { HODDashboardPage } from "./HOD/Dashboard.tsx";
 import { HODHistoryPage } from "./HOD/History.tsx";
 import { HODRequisitionsPage } from "./HOD/Requisitions.tsx";
@@ -46,6 +47,7 @@ const App = () => (
           {/* Admin Routes */}
           <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
           <Route path="/admin/requisitions" element={<AdminRequisitionsPage />} />
+          <Route path="/admin/verify-requisition" element={<AdminVerifyRequisitionPage />} />
           <Route path="/admin/report" element={<AdminReportPage />} />
           <Route path="/admin/history" element={<AdminHistoryPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />

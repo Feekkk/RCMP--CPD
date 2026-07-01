@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, FileText, History, LayoutDashboard, LogOut, Menu, Settings, Users } from "lucide-react";
+import { BarChart3, ClipboardCheck, History, LayoutDashboard, LogOut, Menu, Settings, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 const menuItems = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/requisitions", label: "Requisitions", icon: FileText },
+  { to: "/admin/verify-requisition", label: "Verification", icon: ClipboardCheck },
   { to: "/admin/report", label: "Report", icon: BarChart3 },
   { to: "/admin/history", label: "History", icon: History },
   { to: "/admin/settings", label: "Settings", icon: Settings },
@@ -23,7 +23,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex items-center gap-3 border-b px-6 py-5">
           <img src="/unikl-rcmp.png" alt="logo" width={40} height={40} className="h-18 w-20 object-contain" />
           <div className="leading-tight">
-            <p className="font-display text-sm font-bold text-foreground">CPD Portal</p>
+            <p className="font-display text-sm font-bold text-foreground">HCD Portal</p>
             <p className="text-xs font-medium text-muted-foreground">Admin</p>
           </div>
         </div>
@@ -107,7 +107,7 @@ export function AdminSidebar() {
         </Sheet>
         <div className="flex items-center gap-2">
           <img src="/unikl-rcmp.png" alt="logo" className="h-9 w-9 object-contain" />
-          <p className="font-display text-sm font-bold">CPD Portal</p>
+          <p className="font-display text-sm font-bold">HCD Portal</p>
         </div>
         <div className="w-9" />
       </div>

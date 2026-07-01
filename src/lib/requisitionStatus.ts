@@ -178,6 +178,10 @@ export function formatHistoryDate(value: string): string {
   return date.toLocaleDateString("en-MY", { year: "numeric", month: "short", day: "numeric" });
 }
 
+export function formatTodayDate(): string {
+  return new Date().toLocaleDateString("en-MY", { year: "numeric", month: "short", day: "numeric" });
+}
+
 export function formatProgrammeDates(dates: string[]): string {
   if (!dates.length) return "No date set";
   if (dates.length === 1) return formatHistoryDate(dates[0]);

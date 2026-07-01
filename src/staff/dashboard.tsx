@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
+import { formatTodayDate } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 export const StaffDashboardPage = () => {
@@ -45,7 +46,7 @@ export const StaffDashboardPage = () => {
         <header className="sticky top-14 z-10 md:top-0 border-b bg-background/80 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{formatTodayDate()}</p>
               <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">

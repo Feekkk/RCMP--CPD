@@ -203,36 +203,55 @@ export type PreTrainingStep = {
 };
 
 export function preTrainingSteps(status: string): PreTrainingStep[] {
-  const labels = ["Submitted", "HOD review", "HR verify", "Dean approve"];
-  const keys = ["submitted", "processing", "verified", "approved"];
+  const steps = [
+    { key: "submitted", label: "Submitted" },
+    { key: "hod", label: "HOD review" },
+    { key: "hr", label: "HR verify" },
+    { key: "dean", label: "Dean approve" },
+  ] as const;
 
   if (status === "save_draft") {
-    return labels.map((label, i) => ({ key: keys[i], label, state: "upcoming" as const }));
+    return steps.map((step) => ({ ...step, state: "upcoming" as const }));
   }
 
-  if (status === "rejected" || status === "rejected_hr") {
-    return labels.map((label, i) => ({
-      key: keys[i],
-      label,
-      state: (i === 0 ? "complete" : "rejected") as PreTrainingStep["state"],
+  const rejectedAtStep: Record<string, number> = {
+    rejected_hod: 1,
+    rejected_hr: 2,
+    rejected: 3,
+  };
+
+  if (status in rejectedAtStep) {
+    const rejectedIndex = rejectedAtStep[status];
+    return steps.map((step, index) => ({
+      ...step,
+      state:
+        index < rejectedIndex
+          ? ("complete" as const)
+          : index === rejectedIndex
+            ? ("rejected" as const)
+            : ("upcoming" as const),
     }));
   }
 
-  if (status === "rejected_hod") {
-    return labels.map((label, i) => ({
-      key: keys[i],
-      label,
-      state: (i === 0 ? "complete" : i === 1 ? "rejected" : "upcoming") as PreTrainingStep["state"],
-    }));
+  const currentIndex: Record<string, number> = {
+    submitted: 1,
+    being_process: 2,
+    verified: 3,
+    approved: 4,
+  };
+
+  const progress = currentIndex[status] ?? 0;
+  if (!progress) {
+    return steps.map((step) => ({ ...step, state: "upcoming" as const }));
   }
 
-  const currentStep = { submitted: 2, being_process: 3, verified: 4, approved: 5 }[status] ?? 0;
-
-  return labels.map((label, i) => {
-    const stepNum = i + 1;
-    let state: PreTrainingStep["state"] = "upcoming";
-    if (currentStep > 4 || stepNum < currentStep) state = "complete";
-    else if (stepNum === currentStep) state = "current";
-    return { key: keys[i], label, state };
-  });
+  return steps.map((step, index) => ({
+    ...step,
+    state:
+      progress === 4 || index < progress
+        ? ("complete" as const)
+        : index === progress
+          ? ("current" as const)
+          : ("upcoming" as const),
+  }));
 }

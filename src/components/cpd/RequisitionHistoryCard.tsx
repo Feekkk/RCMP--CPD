@@ -41,6 +41,9 @@ export function RequisitionHistoryCard({
   const [open, setOpen] = React.useState(false);
   const isDraft = item.workflowPhase === "draft" || item.status === "save_draft";
   const isHodRejected = item.status === "rejected_hod";
+  const isHrRejected = item.status === "rejected_hr";
+  const isRejected = isHodRejected || isHrRejected;
+  const rejectionSource = isHodRejected ? "HOD" : isHrRejected ? "HR" : null;
   const trainingPast = isTrainingPast(item.programmeDates);
   const showPostTraining =
     item.workflowPhase === "post_training" ||
@@ -83,9 +86,9 @@ export function RequisitionHistoryCard({
                 <div className="min-w-0">
                   <p className="truncate font-medium leading-snug">{item.title || "Untitled programme"}</p>
                   <p className="text-xs text-muted-foreground">{item.id}</p>
-                  {isHodRejected && item.rejectionRemarks && !open ? (
+                  {isRejected && item.rejectionRemarks && !open ? (
                     <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-                      HOD remarks: {item.rejectionRemarks}
+                      {rejectionSource} remarks: {item.rejectionRemarks}
                     </p>
                   ) : null}
                 </div>
@@ -126,9 +129,9 @@ export function RequisitionHistoryCard({
 
         <CollapsibleContent>
           <div className="grid gap-4 border-t bg-muted/10 px-4 pb-4 pt-4">
-            {isHodRejected && item.rejectionRemarks ? (
+            {isRejected && item.rejectionRemarks ? (
               <Alert className="border-border bg-muted/30">
-                <AlertTitle>Rejection remarks from HOD</AlertTitle>
+                <AlertTitle>Rejection remarks from {rejectionSource}</AlertTitle>
                 <AlertDescription className="whitespace-pre-wrap">{item.rejectionRemarks}</AlertDescription>
               </Alert>
             ) : null}
@@ -159,7 +162,7 @@ export function RequisitionHistoryCard({
               <p>HRDC claimable: {item.hrdcClaimable ? "Yes" : "No"}</p>
             </div>
 
-            {isHodRejected ? (
+            {isRejected ? (
               <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" className="gap-1.5" asChild>
                   <Link to={`${editPath}?edit=${item.requisitionId}`}>
@@ -178,7 +181,7 @@ export function RequisitionHistoryCard({
                   ) : (
                     <RotateCcw className="h-4 w-4" />
                   )}
-                  Resubmit to HOD
+                  {isHrRejected ? "Resubmit for HR review" : "Resubmit to HOD"}
                 </Button>
               </div>
             ) : null}

@@ -1,6 +1,8 @@
-import { History as HistoryIcon } from "lucide-react";
+import { FileSearch, History as HistoryIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 
-import { RequisitionHistoryPanel } from "@/components/cpd/RequisitionHistoryPanel";
+import { RequisitionLogsPanel } from "@/components/cpd/RequisitionLogsPanel";
+import { Button } from "@/components/ui/button";
 import { HODSidebar } from "@/HOD/Sidebar";
 
 export function HODHistoryPage() {
@@ -10,21 +12,25 @@ export function HODHistoryPage() {
 
       <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
         <div className="container mx-auto py-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <HistoryIcon className="h-5 w-5" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <HistoryIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
+                <h1 className="font-display text-2xl font-bold tracking-tight">History</h1>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Activity Log</h1>
-            </div>
+            <Button asChild>
+              <Link to="/hod/requisition/track">
+                <FileSearch className="h-4 w-4" />
+                Track Requisition
+              </Link>
+            </Button>
           </div>
 
-          <RequisitionHistoryPanel
-            description="Your requisitions — expand a row for approval progress and post-training checklist."
-            editPath="/hod/requisitions"
-            pageSize={10}
-          />
+          <RequisitionLogsPanel />
         </div>
       </div>
     </main>

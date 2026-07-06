@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ProgrammeScheduleFields, type ProgrammeSlot } from "@/components/cpd/ProgrammeScheduleFields";
@@ -139,14 +139,24 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
   };
 
   const saveRequisition = async (submitAs: "draft" | "submit") => {
+    const totalDocuments = existingDocuments.length + evidenceFiles.length;
+    if (totalDocuments > 3) {
+      toast.error("A maximum of 3 documents is allowed.");
+      return;
+    }
+
     const setBusy = submitAs === "submit" ? setIsSubmitting : setIsSaving;
     setBusy(true);
     try {
       const formData = buildFormData();
       const result = editId
-        ? await updateRequisition(editId, formData, evidenceFiles, submitAs)
+        ? await updateRequisition(editId, formData, evidenceFiles, submitAs, existingDocuments)
         : await createRequisition(formData, evidenceFiles, submitAs);
       toast.success(result.message);
+      if (editId) {
+        const refreshed = await fetchRequisitionForEdit(editId);
+        applyFormData(refreshed);
+      }
       if (submitAs === "submit") {
         resetForm();
       }
@@ -156,6 +166,8 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
       setBusy(false);
     }
   };
+
+  const remainingDocumentSlots = Math.max(0, 3 - existingDocuments.length - evidenceFiles.length);
 
   const totalBudget = React.useMemo(() => {
     const n = (v: string) => {
@@ -167,13 +179,15 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
 
   const isBusy = isSaving || isSubmitting || isLoadingDraft;
   const isRejectedHod = loadedStatus === "rejected_hod";
+  const isRejectedHr = loadedStatus === "rejected_hr";
+  const isRejected = isRejectedHod || isRejectedHr;
 
   return (
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>
           {editId
-            ? isRejectedHod
+            ? isRejected
               ? `Revise rejected requisition ${editId}`
               : `Edit draft ${editId}`
             : "Requisition Form"}
@@ -182,7 +196,9 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
           {editId
             ? isRejectedHod
               ? "Update your requisition based on HOD feedback, then resubmit for review."
-              : "Update your saved draft and submit when ready."
+              : isRejectedHr
+                ? "Update your requisition based on HR feedback, then resubmit for verification."
+                : "Update your saved draft and submit when ready."
             : "Fill in the details below to submit your requisition."}
         </CardDescription>
       </CardHeader>
@@ -372,15 +388,34 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                   type="file"
                   multiple
                   accept=".pdf,image/*"
-                  onChange={(e) => setEvidenceFiles(Array.from(e.target.files ?? []))}
+                  disabled={remainingDocumentSlots === 0}
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files ?? []);
+                    const maxNew = Math.max(0, 3 - existingDocuments.length);
+                    setEvidenceFiles((prev) => [...prev, ...picked].slice(0, maxNew));
+                    e.target.value = "";
+                  }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {existingDocuments.length + evidenceFiles.length}/3 documents attached
+                </p>
                 {existingDocuments.length ? (
                   <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
                     <p className="font-medium text-foreground">Existing files</p>
                     <ul className="mt-2 grid gap-1">
                       {existingDocuments.map((path) => (
-                        <li key={path} className="truncate">
-                          {path.split("/").pop()}
+                        <li key={path} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{path.split("/").pop()}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                            aria-label={`Remove ${path.split("/").pop()}`}
+                            onClick={() => setExistingDocuments((prev) => prev.filter((doc) => doc !== path))}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </li>
                       ))}
                     </ul>
@@ -391,8 +426,22 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                     <p className="font-medium text-foreground">New uploads</p>
                     <ul className="mt-2 grid gap-1">
                       {evidenceFiles.map((f) => (
-                        <li key={`${f.name}-${f.size}-${f.lastModified}`} className="truncate">
-                          {f.name}
+                        <li key={`${f.name}-${f.size}-${f.lastModified}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{f.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                            aria-label={`Remove ${f.name}`}
+                            onClick={() =>
+                              setEvidenceFiles((prev) =>
+                                prev.filter((file) => `${file.name}-${file.size}-${file.lastModified}` !== `${f.name}-${f.size}-${f.lastModified}`),
+                              )
+                            }
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </li>
                       ))}
                     </ul>
@@ -402,7 +451,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
             </section>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              {!isRejectedHod ? (
+              {!isRejected ? (
                 <Button type="button" variant="secondary" onClick={() => void saveRequisition("draft")} disabled={isBusy}>
                   {isSaving ? (
                     <>
@@ -418,8 +467,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isRejectedHod ? "Resubmitting…" : "Submitting…"}
+                    {isRejected ? "Resubmitting…" : "Submitting…"}
                   </>
+                ) : isRejectedHr ? (
+                  "Resubmit for HR review"
                 ) : isRejectedHod ? (
                   "Resubmit to HOD"
                 ) : (

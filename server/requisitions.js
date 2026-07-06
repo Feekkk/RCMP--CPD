@@ -19,7 +19,7 @@ const STATUS_REJECTED_HOD = 9;
 const STATUS_REJECTED_HR = 10;
 const HOD_ROLE_ID = 3;
 const ADMIN_ROLE_ID = 2;
-const EDITABLE_STATUSES = new Set(["save_draft", "rejected_hod"]);
+const EDITABLE_STATUSES = new Set(["save_draft", "rejected_hod", "rejected_hr"]);
 
 const HISTORY_PHASES = ["draft", "pre_training", "post_training", "completed", "rejected"];
 
@@ -807,14 +807,16 @@ async function queryRequisitionHistory(pool, { user, phaseFilter, page, pageSize
             pt.cpd_points_counted, pt.cpd_points,
             (SELECT al.remarks
              FROM requisition_audit_log al
-             WHERE al.requisition_id = r.id AND al.new_status_id = ?
+             INNER JOIN requisition_status rs_rej ON rs_rej.id = al.new_status_id
+             WHERE al.requisition_id = r.id
+               AND rs_rej.details IN ('rejected', 'rejected_hod', 'rejected_hr')
              ORDER BY al.created_at DESC
              LIMIT 1) AS rejection_remarks
      ${HISTORY_FROM_JOINS}
      WHERE ${whereSql}
      ORDER BY r.updated_at DESC
      LIMIT ${pageSize} OFFSET ${offset}`,
-    [STATUS_REJECTED_HOD, ...whereParams],
+    whereParams,
   );
 
   const summary = await queryHistorySummary(pool, user);
@@ -980,6 +982,28 @@ function documentPathsFromFiles(files) {
   return (files ?? []).slice(0, 3).map((file) => path.join("uploads", "requisitions", file.filename));
 }
 
+function existingDocumentPaths(row) {
+  return [row.path_1, row.path_2, row.path_3].filter(Boolean);
+}
+
+function normalizeKeptDocuments(keptDocuments, existingPaths) {
+  if (!Array.isArray(keptDocuments)) {
+    return existingPaths;
+  }
+  const allowed = new Set(existingPaths);
+  return keptDocuments.filter((docPath) => allowed.has(docPath));
+}
+
+function deleteUploadFile(relativePath) {
+  const absPath = resolveUploadPath(relativePath);
+  if (!absPath) return;
+  try {
+    fs.unlinkSync(absPath);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function fetchOwnedDraftRequisition(pool, requisitionId, staffId) {
   const [rows] = await pool.execute(
     `SELECT r.id, r.submitted_by, r.category, r.justification, r.title, r.venue, r.HRDC_claimable,
@@ -1045,6 +1069,12 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
   if (existing.status === "rejected_hod" && statusId === STATUS_SAVE_DRAFT) {
     statusId = STATUS_REJECTED_HOD;
   }
+  if (existing.status === "rejected_hr" && statusId === STATUS_SAVE_DRAFT) {
+    statusId = STATUS_REJECTED_HR;
+  }
+  if (existing.status === "rejected_hr" && statusId === STATUS_SUBMITTED) {
+    statusId = STATUS_BEING_PROCESS;
+  }
 
   const category = trimOrEmpty(body?.category);
   const justification = trimOrEmpty(body?.justification);
@@ -1065,7 +1095,28 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
 
   const programmeSlots = extractProgrammeSlots(body?.programmeSlots);
   const slotValues = programmeSlotSqlValues(programmeSlots);
-  const docPaths = documentPathsFromFiles(files);
+  const existingPaths = existingDocumentPaths(existing);
+  const keptDocuments = normalizeKeptDocuments(body?.keptDocuments, existingPaths);
+  const newDocPaths = documentPathsFromFiles(files);
+  const finalDocPaths = [...keptDocuments, ...newDocPaths];
+
+  if (finalDocPaths.length > 3) {
+    for (const file of files ?? []) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        /* ignore */
+      }
+    }
+    return { error: "A maximum of 3 documents is allowed.", status: 400 };
+  }
+
+  const removedPaths = existingPaths.filter((docPath) => !keptDocuments.includes(docPath));
+  for (const docPath of removedPaths) {
+    deleteUploadFile(docPath);
+  }
+
+  const docPaths = finalDocPaths;
 
   const conn = await pool.getConnection();
   try {
@@ -1095,22 +1146,22 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
     );
 
     let idDocuments = existing.id_documents;
-    if (docPaths.length > 0) {
-      if (idDocuments) {
-        await conn.execute(
-          `UPDATE requisition_documents SET path_1 = ?, path_2 = ?, path_3 = ? WHERE id_documents = ?`,
-          [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null, idDocuments],
-        );
-      } else {
-        const [docResult] = await conn.execute(
-          `INSERT INTO requisition_documents (path_1, path_2, path_3) VALUES (?, ?, ?)`,
-          [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null],
-        );
-        idDocuments = docResult.insertId;
-      }
+    if (idDocuments) {
+      await conn.execute(
+        `UPDATE requisition_documents SET path_1 = ?, path_2 = ?, path_3 = ? WHERE id_documents = ?`,
+        [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null, idDocuments],
+      );
+    } else if (docPaths.length > 0) {
+      const [docResult] = await conn.execute(
+        `INSERT INTO requisition_documents (path_1, path_2, path_3) VALUES (?, ?, ?)`,
+        [docPaths[0] ?? null, docPaths[1] ?? null, docPaths[2] ?? null],
+      );
+      idDocuments = docResult.insertId;
     }
 
-    const resubmitting = existing.status === "rejected_hod" && statusId === STATUS_SUBMITTED;
+    const resubmittingHod = existing.status === "rejected_hod" && statusId === STATUS_SUBMITTED;
+    const resubmittingHr = existing.status === "rejected_hr" && statusId === STATUS_BEING_PROCESS;
+    const resubmitting = resubmittingHod || resubmittingHr;
 
     await conn.execute(
       `UPDATE requisitions SET
@@ -1132,13 +1183,17 @@ async function updateRequisition(pool, { requisitionId, staffId, body, files, st
         email,
         idDocuments,
         statusId,
-        resubmitting ? 1 : 0,
+        resubmittingHod ? 1 : 0,
         requisitionId,
       ],
     );
 
     if (statusId !== existing.status_id) {
-      const auditRemarks = resubmitting ? "Resubmitted after HOD rejection" : null;
+      const auditRemarks = resubmittingHod
+        ? "Resubmitted after HOD rejection"
+        : resubmittingHr
+          ? "Resubmitted after HR rejection"
+          : null;
       await conn.execute(
         `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
          VALUES (?, ?, ?, ?, ?)`,
@@ -1168,27 +1223,32 @@ async function resubmitRejectedRequisition(pool, { requisitionId, staffId }) {
   if (!existing) {
     return { error: "Requisition not found.", status: 404 };
   }
-  if (existing.status !== "rejected_hod") {
-    return { error: "Only HOD-rejected requisitions can be resubmitted.", status: 400 };
+  if (existing.status !== "rejected_hod" && existing.status !== "rejected_hr") {
+    return { error: "Only rejected requisitions can be resubmitted.", status: 400 };
   }
+
+  const resubmittingHr = existing.status === "rejected_hr";
+  const nextStatusId = resubmittingHr ? STATUS_BEING_PROCESS : STATUS_SUBMITTED;
+  const nextStatus = resubmittingHr ? "being_process" : "submitted";
+  const auditRemarks = resubmittingHr ? "Resubmitted after HR rejection" : "Resubmitted after HOD rejection";
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
     await conn.execute(
-      `UPDATE requisitions SET status_id = ?, recommended_by = NULL WHERE id = ?`,
-      [STATUS_SUBMITTED, requisitionId],
+      `UPDATE requisitions SET status_id = ?, recommended_by = CASE WHEN ? THEN recommended_by ELSE NULL END WHERE id = ?`,
+      [nextStatusId, resubmittingHr ? 1 : 0, requisitionId],
     );
 
     await conn.execute(
       `INSERT INTO requisition_audit_log (requisition_id, changed_by, old_status_id, new_status_id, remarks)
        VALUES (?, ?, ?, ?, ?)`,
-      [requisitionId, staffId, existing.status_id, STATUS_SUBMITTED, "Resubmitted after HOD rejection"],
+      [requisitionId, staffId, existing.status_id, nextStatusId, auditRemarks],
     );
 
     await conn.commit();
-    return { requisitionId, statusId: STATUS_SUBMITTED, status: "submitted" };
+    return { requisitionId, statusId: nextStatusId, status: nextStatus, resubmittingHr };
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -1779,7 +1839,9 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
         requisitionId: result.requisitionId,
         statusId: result.statusId,
         status: result.status,
-        message: "Requisition resubmitted to your Head of Department.",
+        message: result.resubmittingHr
+          ? "Requisition resubmitted for HR verification."
+          : "Requisition resubmitted to your Head of Department.",
       });
     } catch (err) {
       console.error("Resubmit requisition error:", err);

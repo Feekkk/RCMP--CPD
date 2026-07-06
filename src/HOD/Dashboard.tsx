@@ -1,11 +1,17 @@
 import { Link } from "react-router-dom";
-import { Award, CheckCircle2, ClipboardList, Clock, FileText, Users } from "lucide-react";
+import { Award, CheckCircle2, ChevronDown, ClipboardList, Clock, FileText, History, Users } from "lucide-react";
 
 import { CpdProgressOverviewCard, HOD_PROGRESS_MOCK } from "@/components/cpd/CpdProgressOverviewCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HODSidebar } from "@/HOD/Sidebar";
 
@@ -75,18 +81,29 @@ export const HODDashboardPage = () => {
               <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" className="hidden sm:inline-flex" asChild>
-                <Link to="/hod/requisitions">
-                  <FileText className="h-4 w-4" />
-                  Requisitions
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link to="/hod/review-queue">
-                  <ClipboardList className="h-4 w-4" />
-                  Review queue
-                </Link>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    <FileText className="h-4 w-4" />
+                    Requisitions
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link to="/hod/requisitions" className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Make Requisitions
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/hod/requisition/track" className="flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      Track Requisition
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

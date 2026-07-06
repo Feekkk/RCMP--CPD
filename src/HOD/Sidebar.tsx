@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Archive, ClipboardCheck, Gauge, LogOut, Menu, ScrollText, SlidersHorizontal } from "lucide-react";
+import { Archive, ClipboardCheck, Gauge, LogOut, Menu, SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 
 const menuItems = [
   { to: "/hod/dashboard", label: "Dashboard", icon: Gauge },
-  { to: "/hod/requisitions", label: "Requisitions", icon: ScrollText },
   { to: "/hod/review-queue", label: "Review Queue", icon: ClipboardCheck },
   { to: "/hod/history", label: "History", icon: Archive },
   { to: "/hod/settings", label: "Settings", icon: SlidersHorizontal },

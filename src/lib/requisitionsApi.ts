@@ -200,8 +200,9 @@ export async function updateRequisition(
   data: RequisitionFormData,
   files: File[],
   submitAs: "draft" | "submit",
+  keptDocuments?: string[],
 ): Promise<CreateRequisitionResponse> {
-  return sendRequisitionForm(`/api/requisitions/${requisitionId}`, "PATCH", data, files, submitAs);
+  return sendRequisitionForm(`/api/requisitions/${requisitionId}`, "PATCH", data, files, submitAs, keptDocuments);
 }
 
 async function sendRequisitionForm(
@@ -210,9 +211,18 @@ async function sendRequisitionForm(
   data: RequisitionFormData,
   files: File[],
   submitAs: "draft" | "submit",
+  keptDocuments?: string[],
 ): Promise<CreateRequisitionResponse> {
+  const payload: RequisitionFormData & { submitAs: "draft" | "submit"; keptDocuments?: string[] } = {
+    ...data,
+    submitAs,
+  };
+  if (method === "PATCH") {
+    payload.keptDocuments = keptDocuments ?? [];
+  }
+
   const formData = new FormData();
-  formData.append("data", JSON.stringify({ ...data, submitAs }));
+  formData.append("data", JSON.stringify(payload));
 
   for (const file of files.slice(0, 3)) {
     formData.append("documents", file);

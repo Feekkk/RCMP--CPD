@@ -22,6 +22,7 @@ import { HODHistoryPage } from "./HOD/History.tsx";
 import { HODRequisitionsPage } from "./HOD/Requisitions.tsx";
 import { HODReviewQueuePage } from "./HOD/ReviewQueue.tsx";
 import { HODSettingsPage } from "./HOD/Settings.tsx";
+import { HODTrackRequisitionPage } from "./HOD/TrackRequisition.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -57,6 +58,7 @@ const App = () => (
           <Route path="/hod/dashboard" element={<HODDashboardPage />} />
           <Route path="/hod/requisitions" element={<HODRequisitionsPage />} />
           <Route path="/hod/review-queue" element={<HODReviewQueuePage />} />
+          <Route path="/hod/requisition/track" element={<HODTrackRequisitionPage />} />
           <Route path="/hod/history" element={<HODHistoryPage />} />
           <Route path="/hod/settings" element={<HODSettingsPage />} />
 

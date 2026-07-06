@@ -150,7 +150,7 @@ export function statusDetailLabel(status: string): string {
     case "rejected_hr":
       return "Rejected by HR";
     case "rejected":
-      return "Rejected";
+      return "Rejected by approval";
     default:
       return statusGroupLabel(statusGroupFromDb(status));
   }
@@ -189,6 +189,13 @@ export function formatProgrammeDates(dates: string[]): string {
   return `${formatHistoryDate(sorted[0])} – ${formatHistoryDate(sorted[sorted.length - 1])}`;
 }
 
+export function formatProgrammeSlotSchedule(slot: { date: string; from: string; to: string }): string {
+  const date = formatHistoryDate(slot.date);
+  if (!slot.from && !slot.to) return date;
+  if (slot.from && slot.to) return `${date} · ${slot.from} – ${slot.to}`;
+  return `${date} · ${slot.from || slot.to}`;
+}
+
 export function isTrainingPast(programmeDates: string[]): boolean {
   if (!programmeDates.length) return false;
   const last = programmeDates.reduce((a, b) => (a > b ? a : b));
@@ -207,7 +214,7 @@ export function preTrainingSteps(status: string): PreTrainingStep[] {
     { key: "submitted", label: "Submitted" },
     { key: "hod", label: "HOD review" },
     { key: "hr", label: "HR verify" },
-    { key: "dean", label: "Dean approve" },
+    { key: "dean", label: "Approval" },
   ] as const;
 
   if (status === "save_draft") {

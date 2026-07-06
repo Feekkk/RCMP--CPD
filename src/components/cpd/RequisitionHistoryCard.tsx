@@ -8,7 +8,6 @@ import { PostTrainingChecklist } from "@/components/cpd/PostTrainingChecklist";
 import { PreTrainingStepper } from "@/components/cpd/PreTrainingStepper";
 import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -16,6 +15,7 @@ import { resubmitRequisition, type RequisitionHistoryItem } from "@/lib/requisit
 import {
   formatHistoryDate,
   formatProgrammeDates,
+  formatProgrammeSlotSchedule,
   isTrainingPast,
   preTrainingSteps,
   statusDetailLabel,
@@ -42,8 +42,9 @@ export function RequisitionHistoryCard({
   const isDraft = item.workflowPhase === "draft" || item.status === "save_draft";
   const isHodRejected = item.status === "rejected_hod";
   const isHrRejected = item.status === "rejected_hr";
-  const isRejected = isHodRejected || isHrRejected;
-  const rejectionSource = isHodRejected ? "HOD" : isHrRejected ? "HR" : null;
+  const isApprovalRejected = item.status === "rejected";
+  const isResubmittableRejected = isHodRejected || isHrRejected;
+  const rejectionSource = isHodRejected ? "HOD" : isHrRejected ? "HR" : isApprovalRejected ? "Approval" : null;
   const trainingPast = isTrainingPast(item.programmeDates);
   const showPostTraining =
     item.workflowPhase === "post_training" ||
@@ -86,21 +87,17 @@ export function RequisitionHistoryCard({
                 <div className="min-w-0">
                   <p className="truncate font-medium leading-snug">{item.title || "Untitled programme"}</p>
                   <p className="text-xs text-muted-foreground">{item.id}</p>
-                  {isRejected && item.rejectionRemarks && !open ? (
+                  {rejectionSource && item.rejectionRemarks && !open ? (
                     <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
                       {rejectionSource} remarks: {item.rejectionRemarks}
                     </p>
                   ) : null}
                 </div>
                 <div className="flex items-center gap-2 sm:justify-end">
-                  {neutralStyle ? (
-                    <Badge variant="outline">{statusDetailLabel(item.status)}</Badge>
-                  ) : (
-                    <RequisitionStatusBadge
-                      statusGroup={item.statusGroup}
-                      label={statusDetailLabel(item.status)}
-                    />
-                  )}
+                  <RequisitionStatusBadge
+                    statusGroup={item.statusGroup}
+                    label={statusDetailLabel(item.status)}
+                  />
                 </div>
                 <div className="text-sm text-muted-foreground sm:text-right">
                   <p className="text-xs uppercase tracking-wide">Submitted</p>
@@ -129,7 +126,7 @@ export function RequisitionHistoryCard({
 
         <CollapsibleContent>
           <div className="grid gap-4 border-t bg-muted/10 px-4 pb-4 pt-4">
-            {isRejected && item.rejectionRemarks ? (
+            {rejectionSource && item.rejectionRemarks ? (
               <Alert className="border-border bg-muted/30">
                 <AlertTitle>Rejection remarks from {rejectionSource}</AlertTitle>
                 <AlertDescription className="whitespace-pre-wrap">{item.rejectionRemarks}</AlertDescription>
@@ -158,11 +155,23 @@ export function RequisitionHistoryCard({
             ) : null}
 
             <div className="grid gap-1 text-sm text-muted-foreground">
-              {item.departmentName ? <p>Department: {item.departmentName}</p> : null}
-              <p>HRDC claimable: {item.hrdcClaimable ? "Yes" : "No"}</p>
+              {item.programmeSlots?.length ? (
+                item.programmeSlots.map((slot, index) => (
+                  <p key={`${slot.date}-${slot.from}-${slot.to}-${index}`}>
+                    {formatProgrammeSlotSchedule(slot)}
+                  </p>
+                ))
+              ) : (
+                <p>{formatProgrammeDates(item.programmeDates)}</p>
+              )}
+              {rejectionSource && item.rejectionRemarks ? (
+                <p className="whitespace-pre-wrap">
+                  Remarks ({rejectionSource}): {item.rejectionRemarks}
+                </p>
+              ) : null}
             </div>
 
-            {isRejected ? (
+            {isResubmittableRejected ? (
               <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" className="gap-1.5" asChild>
                   <Link to={`${editPath}?edit=${item.requisitionId}`}>

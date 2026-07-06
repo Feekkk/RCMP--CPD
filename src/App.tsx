@@ -12,6 +12,7 @@ import { TrackRequisition } from "./staff/TrackRequisition.tsx";
 import { Settings } from "./staff/Settings.tsx";
 import { AdminDashboardPage } from "./admin/Dashboard.tsx";
 import { AdminHistoryPage } from "./admin/History.tsx";
+import { AdminTrackRequisitionPage } from "./admin/TrackRequisition.tsx";
 import { AdminReportPage } from "./admin/Report.tsx";
 import { AdminRequisitionsPage } from "./admin/Requisitions.tsx";
 import { AdminSettingsPage } from "./admin/Settings.tsx";
@@ -23,6 +24,9 @@ import { HODRequisitionsPage } from "./HOD/Requisitions.tsx";
 import { HODReviewQueuePage } from "./HOD/ReviewQueue.tsx";
 import { HODSettingsPage } from "./HOD/Settings.tsx";
 import { HODTrackRequisitionPage } from "./HOD/TrackRequisition.tsx";
+import { ApprovalDashboardPage } from "./approval/dashboard.tsx";
+import { ApprovalQueuePage } from "./approval/Approval.tsx";
+import { ApprovalReportPage } from "./approval/Report.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -51,6 +55,7 @@ const App = () => (
           <Route path="/admin/verify-requisition" element={<AdminVerifyRequisitionPage />} />
           <Route path="/admin/report" element={<AdminReportPage />} />
           <Route path="/admin/history" element={<AdminHistoryPage />} />
+          <Route path="/admin/requisition/track" element={<AdminTrackRequisitionPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
 
@@ -61,6 +66,11 @@ const App = () => (
           <Route path="/hod/requisition/track" element={<HODTrackRequisitionPage />} />
           <Route path="/hod/history" element={<HODHistoryPage />} />
           <Route path="/hod/settings" element={<HODSettingsPage />} />
+
+          {/* Approval Routes */}
+          <Route path="/approval/dashboard" element={<ApprovalDashboardPage />} />
+          <Route path="/approval/report" element={<ApprovalReportPage />} />
+          <Route path="/approval/approval" element={<ApprovalQueuePage />} />
 
           {/* Pages */}
           <Route path="/login" element={<Login />} />

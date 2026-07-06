@@ -63,6 +63,7 @@ export type RequisitionHistoryItem = {
   submittedAt: string;
   updatedAt: string;
   programmeDates: string[];
+  programmeSlots: HodProgrammeSlot[];
   totalBudget: number;
   status: string;
   statusGroup: "draft" | "submitted" | "pending" | "approved" | "rejected";
@@ -181,6 +182,28 @@ export type AdminVerifyQueueResponse = {
 export type AdminVerifyDecision = "verify" | "reject";
 
 export type AdminVerifyResponse = HodReviewResponse;
+
+export type HrVerification = {
+  name: string;
+  email: string;
+  verifiedAt: string;
+  remarks: string | null;
+};
+
+export type ApprovalQueueItem = AdminVerifyQueueItem & {
+  hrVerification: HrVerification | null;
+};
+
+export type ApprovalQueueResponse = {
+  requisitions: ApprovalQueueItem[];
+  summary: {
+    total: number;
+  };
+};
+
+export type ApprovalDecision = "approve" | "reject";
+
+export type ApprovalResponse = HodReviewResponse;
 
 async function parseApiError(res: Response, fallback: string) {
   const data = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
@@ -409,6 +432,45 @@ export async function submitAdminVerify(
   }
 
   return res.json() as Promise<AdminVerifyResponse>;
+}
+
+export async function fetchApprovalQueue(): Promise<ApprovalQueueResponse> {
+  const res = await fetch("/api/requisitions/approval/queue", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load approval queue."));
+  }
+
+  return res.json() as Promise<ApprovalQueueResponse>;
+}
+
+export async function fetchApprovalDetail(requisitionId: number): Promise<ApprovalQueueItem> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/approval`, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load requisition details."));
+  }
+
+  return res.json() as Promise<ApprovalQueueItem>;
+}
+
+export async function submitApproval(
+  requisitionId: number,
+  decision: ApprovalDecision,
+  remarks?: string,
+): Promise<ApprovalResponse> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/approval`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision, remarks }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to submit approval decision."));
+  }
+
+  return res.json() as Promise<ApprovalResponse>;
 }
 
 export async function resubmitRequisition(requisitionId: number): Promise<CreateRequisitionResponse> {

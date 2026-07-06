@@ -75,6 +75,7 @@ const pool = mysql.createPool({
 });
 
 const HOD_ROLE_ID = 3;
+const APPROVAL_ROLE_ID = 4;
 /** Bump when API surface changes — exposed on /api/ping for deploy checks */
 const API_BUILD = 10;
 
@@ -86,6 +87,8 @@ function dashboardPathForRole(roleId) {
       return "/admin/dashboard";
     case 3:
       return "/hod/dashboard";
+    case APPROVAL_ROLE_ID:
+      return "/approval/dashboard";
     default:
       return "/staff/dashboard";
   }

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { ProgrammeScheduleFields, type ProgrammeSlot } from "@/components/cpd/ProgrammeScheduleFields";
 import { FundingClaimFields, type FundingClaim } from "@/components/cpd/FundingClaimFields";
+import { RequiredMark } from "@/components/cpd/RequiredMark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -222,7 +223,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                 <p className="text-sm text-muted-foreground">Select the requisition category.</p>
               </div>
               <div className="grid gap-2 md:max-w-md">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">
+                  Category
+                  <RequiredMark />
+                </Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger id="category">
                     <SelectValue placeholder="Choose a category" />
@@ -244,7 +248,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                 <p className="text-sm text-muted-foreground">Briefly explain the reason for this requisition.</p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="justification">Justification</Label>
+                <Label htmlFor="justification">
+                  Justification
+                  <RequiredMark />
+                </Label>
                 <Textarea
                   id="justification"
                   placeholder="Write your justification..."
@@ -264,7 +271,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2 md:col-span-2">
-                  <Label htmlFor="programmeTitle">Title</Label>
+                  <Label htmlFor="programmeTitle">
+                    Title
+                    <RequiredMark />
+                  </Label>
                   <Input
                     id="programmeTitle"
                     placeholder="Programme title"
@@ -276,7 +286,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                   <ProgrammeScheduleFields slots={programmeSlots} onChange={setProgrammeSlots} />
                 </div>
                 <div className="grid gap-2 md:col-span-2">
-                  <Label htmlFor="programmeVenue">Venue</Label>
+                  <Label htmlFor="programmeVenue">
+                    Venue
+                    <RequiredMark />
+                  </Label>
                   <Input
                     id="programmeVenue"
                     placeholder="Venue"
@@ -302,13 +315,19 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="organiserName">Organiser</Label>
+                  <Label htmlFor="organiserName">
+                    Organiser
+                    <RequiredMark />
+                  </Label>
                   <Input id="organiserName" 
                   placeholder="Organiser name" 
                   value={organiserName} onChange={(e) => setOrganiserName(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="organiserContactPerson">Contact person</Label>
+                  <Label htmlFor="organiserContactPerson">
+                    Contact person
+                    <RequiredMark />
+                  </Label>
                   <Input
                     id="organiserContactPerson"
                     placeholder="Contact person"
@@ -317,7 +336,10 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                   />
                 </div>
                 <div className="grid gap-2 md:col-span-2">
-                  <Label htmlFor="organiserAddress">Address</Label>
+                  <Label htmlFor="organiserAddress">
+                    Address
+                    <RequiredMark />
+                  </Label>
                   <Textarea
                     id="organiserAddress"
                     placeholder="Organiser address"
@@ -327,11 +349,17 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="organiserPhone">Phone number</Label>
+                  <Label htmlFor="organiserPhone">
+                    Phone number
+                    <RequiredMark />
+                  </Label>
                   <Input id="organiserPhone" type="tel" placeholder="Phone number" value={organiserPhone} onChange={(e) => setOrganiserPhone(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="organiserEmail">Email</Label>
+                  <Label htmlFor="organiserEmail">
+                    Email
+                    <RequiredMark />
+                  </Label>
                   <Input id="organiserEmail" type="email" placeholder="Organiser email" value={organiserEmail} onChange={(e) => setOrganiserEmail(e.target.value)} />
                 </div>
               </div>

@@ -37,7 +37,7 @@ const ACTION_ITEMS = [
     label: "Post-training follow-up",
     description: "Upload attendance, complete e-survey, and HOD evaluation.",
     action: "Upload",
-    href: "/staff/requisition/track",
+    href: "/staff/requisition/track?phase=post_training",
     icon: Upload,
     accent: "border-primary/40 bg-primary/5",
     iconClass: "text-primary",

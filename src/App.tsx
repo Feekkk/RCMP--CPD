@@ -7,8 +7,10 @@ import Index from "./pages/Index.tsx";
 import Login from "./pages/login.tsx";
 import { StaffDashboardPage } from "./staff/dashboard.tsx";
 import { History } from "./staff/History.tsx";
+import { PostTrainingPage } from "./staff/PostTraining.tsx";
 import { Requisition } from "./staff/Requisition.tsx";
 import { TrackRequisition } from "./staff/TrackRequisition.tsx";
+import { StaffCalendarPage } from "./staff/calendar.tsx";
 import { Settings } from "./staff/Settings.tsx";
 import { AdminDashboardPage } from "./admin/Dashboard.tsx";
 import { AdminHistoryPage } from "./admin/History.tsx";
@@ -46,6 +48,8 @@ const App = () => (
           <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
           <Route path="/staff/requisition" element={<Requisition />} />
           <Route path="/staff/requisition/track" element={<TrackRequisition />} />
+          <Route path="/staff/post-training/:requisitionId" element={<PostTrainingPage />} />
+          <Route path="/staff/calendar" element={<StaffCalendarPage />} />
           <Route path="/staff/history" element={<History />} />
           <Route path="/staff/settings" element={<Settings />} />
 

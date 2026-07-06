@@ -10,6 +10,7 @@ import {
   getSchedulePolicySummary,
   REQUISITION_LEAD_TIME_MONTHS,
 } from "@/lib/requisitionPolicy";
+import { RequiredMark } from "@/components/cpd/RequiredMark";
 import { cn } from "@/lib/utils";
 
 export type ProgrammeSlot = {
@@ -66,7 +67,10 @@ export function ProgrammeScheduleFields({ slots, onChange }: ProgrammeScheduleFi
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-4">
-        <Label>Programme schedule</Label>
+        <Label>
+          Programme schedule
+          <RequiredMark />
+        </Label>
         <Button
           type="button"
           variant="secondary"
@@ -93,6 +97,7 @@ export function ProgrammeScheduleFields({ slots, onChange }: ProgrammeScheduleFi
                 <div className="flex items-center gap-2">
                   <Label htmlFor={`slotDate-${idx}`} className="text-sm">
                     Date
+                    <RequiredMark />
                   </Label>
                   {slotPolicy ? (
                     <Badge

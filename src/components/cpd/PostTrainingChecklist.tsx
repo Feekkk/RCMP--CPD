@@ -1,5 +1,7 @@
-import { Check, ClipboardList, FileCheck, Star, Users } from "lucide-react";
+import { Check, Circle, ClipboardList, FileCheck, Star, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
 import { TRAFFIC_LIGHT_STYLES } from "@/lib/requisitionStatus";
 import { cn } from "@/lib/utils";
 import type { PostTrainingInfo } from "@/lib/requisitionsApi";
@@ -11,103 +13,112 @@ const STEPS = [
 ];
 
 type PostTrainingChecklistProps = {
+  requisitionId?: number;
   postTraining: PostTrainingInfo;
   locked?: boolean;
-  compact?: boolean;
   neutralStyle?: boolean;
+  showAction?: boolean;
 };
 
+function stepStyles(done: boolean, locked: boolean, neutralStyle: boolean) {
+  if (neutralStyle) {
+    return done
+      ? { circle: "bg-foreground text-background border-border", text: "text-foreground" }
+      : { circle: "border-border bg-muted/40 text-muted-foreground", text: locked ? "text-muted-foreground" : "text-muted-foreground" };
+  }
+  if (done) {
+    return {
+      circle: cn(TRAFFIC_LIGHT_STYLES.green.dot, "text-white"),
+      text: TRAFFIC_LIGHT_STYLES.green.text,
+    };
+  }
+  if (locked) {
+    return {
+      circle: "border-muted-foreground/25 bg-muted/30 text-muted-foreground",
+      text: "text-muted-foreground",
+    };
+  }
+  return {
+    circle: cn(TRAFFIC_LIGHT_STYLES.yellow.bg, TRAFFIC_LIGHT_STYLES.yellow.border),
+    text: TRAFFIC_LIGHT_STYLES.yellow.text,
+  };
+}
+
 export function PostTrainingChecklist({
+  requisitionId,
   postTraining,
   locked = false,
-  compact = false,
   neutralStyle = false,
+  showAction = true,
 }: PostTrainingChecklistProps) {
   const allDone = postTraining.isComplete;
-  const progressLight =
-    allDone && postTraining.cpdPointsCounted
-      ? "green"
-      : locked
-        ? "neutral"
-        : postTraining.completedSteps > 0
-          ? "yellow"
-          : "yellow";
-
-  const headerStyles = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[progressLight];
 
   return (
-    <div className={cn("grid gap-2 rounded-lg border p-3", headerStyles.border, headerStyles.bg, compact ? "gap-1.5" : "gap-2")}>
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className={cn("flex items-center gap-2 text-xs font-semibold uppercase tracking-wide", headerStyles.text)}>
-          {!neutralStyle ? (
-            <span className={cn("h-2 w-2 rounded-full", headerStyles.dot)} aria-hidden />
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Post-training</p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {postTraining.completedSteps}/{postTraining.totalSteps}
+          </span>
+          {showAction && requisitionId && !locked && !allDone ? (
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" asChild>
+              <Link to={`/staff/post-training/${requisitionId}`}>Open</Link>
+            </Button>
           ) : null}
-          Post-training
-        </p>
-        <span className={cn("text-xs font-semibold tabular-nums", headerStyles.text)}>
-          {postTraining.completedSteps}/{postTraining.totalSteps}
-        </span>
+        </div>
       </div>
 
-      <div className={cn("grid gap-1.5 sm:grid-cols-3")}>
-        {STEPS.map(({ key, label, icon: Icon }) => {
-          const done = postTraining[key];
-          const itemLight = done ? "green" : locked ? "neutral" : "yellow";
-          const itemStyles = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : TRAFFIC_LIGHT_STYLES[itemLight];
+      <ol className="flex flex-wrap items-center gap-1 sm:gap-0">
+        {STEPS.map((step, idx) => {
+          const done = postTraining[step.key];
+          const styles = stepStyles(done, locked, neutralStyle);
+          const Icon = step.icon;
 
           return (
-            <div
-              key={key}
-              className={cn(
-                "flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs",
-                itemStyles.border,
-                itemStyles.bg,
-                locked && !done && "opacity-60",
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                  done
-                    ? neutralStyle
-                      ? "bg-foreground text-background"
-                      : cn(itemStyles.dot, "text-white")
-                    : cn("border", itemStyles.border, itemStyles.bg),
-                )}
-              >
-                {done ? (
-                  <Check className="h-3 w-3" />
-                ) : (
-                  <Icon className={cn("h-3 w-3", itemStyles.text)} />
-                )}
-              </span>
-              <span className={cn("font-medium", itemStyles.text)}>{label}</span>
-            </div>
+            <li key={step.key} className="flex items-center">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
+                    styles.circle,
+                  )}
+                >
+                  {done ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : locked ? (
+                    <Icon className="h-3 w-3 opacity-60" />
+                  ) : (
+                    <Circle className={cn("h-2 w-2 fill-current", styles.text)} />
+                  )}
+                </span>
+                <span className={cn("text-xs font-medium", styles.text)}>{step.label}</span>
+              </div>
+              {idx < STEPS.length - 1 ? (
+                <div
+                  className={cn(
+                    "mx-2 hidden h-0.5 w-6 sm:block md:w-10",
+                    done && !neutralStyle ? TRAFFIC_LIGHT_STYLES.green.dot : "bg-border",
+                    done && neutralStyle && "bg-foreground/30",
+                  )}
+                />
+              ) : null}
+            </li>
           );
         })}
-      </div>
+      </ol>
 
       {allDone && postTraining.cpdPointsCounted ? (
-        <div
-          className={cn(
-            "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-            neutralStyle
-              ? "border-border bg-muted/30"
-              : cn(TRAFFIC_LIGHT_STYLES.green.border, TRAFFIC_LIGHT_STYLES.green.bg),
-          )}
-        >
-          <Star className={cn("h-4 w-4", neutralStyle ? "text-muted-foreground" : TRAFFIC_LIGHT_STYLES.green.text)} />
-          <span className={cn("font-medium", neutralStyle ? "text-foreground" : TRAFFIC_LIGHT_STYLES.green.text)}>
-            CPD points recorded
-            {postTraining.cpdPoints != null ? `: ${postTraining.cpdPoints}` : ""}
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Star className={cn("h-3.5 w-3.5", !neutralStyle && TRAFFIC_LIGHT_STYLES.green.text)} />
+          <span className={cn(!neutralStyle && TRAFFIC_LIGHT_STYLES.green.text, "font-medium")}>
+            CPD points recorded{postTraining.cpdPoints != null ? ` · ${postTraining.cpdPoints} pts` : ""}
           </span>
-        </div>
-      ) : locked ? (
-        <p className="text-xs text-muted-foreground">Available after the programme date.</p>
-      ) : postTraining.completedSteps < postTraining.totalSteps ? (
-        <p className={cn("text-xs font-medium", neutralStyle ? "text-muted-foreground" : TRAFFIC_LIGHT_STYLES.yellow.text)}>
-          Action needed — complete all checklist items to count CPD points.
         </p>
+      ) : locked ? (
+        <p className="text-xs text-muted-foreground">Unlocks after the programme date.</p>
+      ) : postTraining.completedSteps < postTraining.totalSteps ? (
+        <p className="text-xs text-muted-foreground">Complete all items to count CPD points.</p>
       ) : null}
     </div>
   );

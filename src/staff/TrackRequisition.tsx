@@ -21,7 +21,7 @@ export function TrackRequisition() {
 
           <RequisitionHistoryPanel
             neutralStyle
-            description="Your requisitions — expand a row for approval progress. Rejected items show HOD or HR remarks with options to edit and resubmit."
+            description="Expand a row for approval progress. Rejected items show HOD or HR remarks with options to edit and resubmit."
             showBudget
             editPath="/staff/requisition"
             pageSize={100}

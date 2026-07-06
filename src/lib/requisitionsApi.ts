@@ -54,6 +54,29 @@ export type PostTrainingInfo = {
   isComplete: boolean;
 };
 
+export type ESurveyResponses = {
+  objectivesMet: "yes" | "partially" | "no";
+  satisfaction: "1" | "2" | "3" | "4" | "5";
+  wouldRecommend: "yes" | "no";
+  comments: string | null;
+};
+
+export type PostTrainingDetail = {
+  requisitionId: number;
+  id: string;
+  title: string;
+  category: string;
+  venue: string;
+  programmeSlots: HodProgrammeSlot[];
+  programmeDates: string[];
+  workflowPhase: RequisitionHistoryItem["workflowPhase"];
+  locked: boolean;
+  postTraining: PostTrainingInfo & {
+    attendanceFileName: string | null;
+    eSurveyResponses: ESurveyResponses | null;
+  };
+};
+
 export type RequisitionHistoryItem = { 
   requisitionId: number;
   id: string;
@@ -484,4 +507,76 @@ export async function resubmitRequisition(requisitionId: number): Promise<Create
   }
 
   return res.json() as Promise<CreateRequisitionResponse>;
+}
+
+export async function fetchPostTrainingDetail(requisitionId: number): Promise<PostTrainingDetail> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/post-training`, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load post-training details."));
+  }
+
+  return res.json() as Promise<PostTrainingDetail>;
+}
+
+export type ESurveySubmission = {
+  objectivesMet: "yes" | "partially" | "no";
+  satisfaction: "1" | "2" | "3" | "4" | "5";
+  wouldRecommend: "yes" | "no";
+  comments?: string;
+};
+
+export async function submitPostTrainingSurvey(
+  requisitionId: number,
+  data: ESurveySubmission,
+): Promise<{ message: string }> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/post-training/e-survey`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to submit e-survey."));
+  }
+
+  return res.json() as Promise<{ message: string }>;
+}
+
+export async function submitPostTrainingAttendance(
+  requisitionId: number,
+  file: File,
+): Promise<{ message: string }> {
+  const formData = new FormData();
+  formData.append("attendance", file);
+
+  const res = await fetch(`/api/requisitions/${requisitionId}/post-training/attendance`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to upload attendance evidence."));
+  }
+
+  return res.json() as Promise<{ message: string }>;
+}
+
+export function postTrainingAttendanceUrl(requisitionId: number): string {
+  return `/api/requisitions/${requisitionId}/post-training/attendance`;
+}
+
+export async function removePostTrainingAttendance(requisitionId: number): Promise<{ message: string }> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/post-training/attendance`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to remove attendance evidence."));
+  }
+
+  return res.json() as Promise<{ message: string }>;
 }

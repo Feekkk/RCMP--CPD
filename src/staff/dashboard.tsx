@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { CalendarCheck, CheckCircle2, ChevronDown, Clock, FileText, Loader2, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  CalendarCheck,
+  CheckCircle2,
+  FileSearch,
+  FileText,
+  History,
+  Loader2,
+  type LucideIcon,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { NeedActionCard } from "@/components/cpd/NeedActionCard";
@@ -14,9 +23,71 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
+import { cn } from "@/lib/utils";
+
+const ACADEMIC_YEAR_LABEL = "Academic year 2025/2026";
+const COMPLETED_HOURS_MOCK = 18;
+
+type TrackStatus = "off-track" | "need-attention" | "on-track";
+
+const TRACK_STATUS_MOCK: TrackStatus = "need-attention";
+
+const trackStatusMeta: Record<
+  TrackStatus,
+  { label: string; valueClass: string; iconClass: string }
+> = {
+  "on-track": {
+    label: "On-track",
+    valueClass: "text-green-600 dark:text-green-400",
+    iconClass: "bg-green-500/10 text-green-600 dark:text-green-400",
+  },
+  "need-attention": {
+    label: "Need Attention",
+    valueClass: "text-yellow-600 dark:text-yellow-400",
+    iconClass: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+  },
+  "off-track": {
+    label: "Off-Track",
+    valueClass: "text-red-600 dark:text-red-400",
+    iconClass: "bg-red-500/10 text-red-600 dark:text-red-400",
+  },
+};
+
+const quickActions: Array<{
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  description: string;
+}> = [
+  {
+    to: "/staff/requisition",
+    icon: FileText,
+    label: "Create requisition",
+    description: "Submit a new CPD training request",
+  },
+  {
+    to: "/staff/requisition/track",
+    icon: FileSearch,
+    label: "Track requisition",
+    description: "Check status and approval progress",
+  },
+  {
+    to: "/staff/calendar",
+    icon: CalendarCheck,
+    label: "Your calendar",
+    description: "View planned programmes and deadlines",
+  },
+  {
+    to: "/staff/history",
+    icon: History,
+    label: "View history",
+    description: "Browse past submissions and outcomes",
+  },
+];
 
 export const StaffDashboardPage = () => {
   const { data: requisitionData, isLoading: isRecentLoading, isError: isRecentError } = useQuery({
@@ -24,15 +95,11 @@ export const StaffDashboardPage = () => {
     queryFn: () => fetchRequisitionHistory({ phase: "all", page: 1, pageSize: 5 }),
   });
 
-  const totalRequisitions = requisitionData?.summary?.all ?? 0;
+  const submittedRequisitions = requisitionData?.summary
+    ? requisitionData.summary.all - requisitionData.summary.draft
+    : 0;
   const recentActivity = requisitionData?.requisitions ?? [];
-
-  const stats = [
-    { label: "Completed", value: "18h", icon: CheckCircle2, footnote: "Academic year 2025/2026" },
-    { label: "Total Requisition", value: String(totalRequisitions), icon: FileText, footnote: "Submitted requisitions" },
-    { label: "Remaining", value: "22h", icon: Clock, footnote: "Academic year 2025/2026" },
-    { label: "This month", value: "+6h", icon: TrendingUp, footnote: "Academic year 2025/2026" },
-  ] as const;
+  const trackStatus = trackStatusMeta[TRACK_STATUS_MOCK];
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -43,24 +110,23 @@ export const StaffDashboardPage = () => {
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{formatTodayDate()}</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
+              <h1 className="h-[38px] font-[Georgia,serif] text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" className="hidden sm:inline-flex">
-                <CalendarCheck className="h-4 w-4" />
-                Plan CPD
+              <Button variant="outline" size="icon" aria-label="Plan CPD" asChild>
+                <Link to="/staff/calendar">
+                  <CalendarCheck className="h-4 w-4" />
+                </Link>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button>
+                  <Button size="icon" aria-label="New Requisition">
                     <FileText className="h-4 w-4" />
-                    New Requisition
-                    <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
-                    <Link to="/staff/requisition">Make Requisition</Link>
+                    <Link to="/staff/requisition">New Requisition</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link to="/staff/requisition/track">Track Requisition</Link>
@@ -72,21 +138,51 @@ export const StaffDashboardPage = () => {
         </header>
 
         <div className="container mx-auto py-8">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.map((s) => (
-              <Card key={s.label}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{s.label}</CardTitle>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <s.icon className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="font-display text-2xl font-bold">{s.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{s.footnote}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="font-display text-2xl font-bold">{COMPLETED_HOURS_MOCK}h</p>
+                <p className="mt-1 text-xs text-muted-foreground">{ACADEMIC_YEAR_LABEL}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Requisition</CardTitle>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileText className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="font-display text-2xl font-bold">
+                  {isRecentLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  ) : (
+                    submittedRequisitions
+                  )}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Submitted requisitions</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Your Status</CardTitle>
+                <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", trackStatus.iconClass)}>
+                  <Activity className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className={cn("font-display text-2xl font-bold", trackStatus.valueClass)}>{trackStatus.label}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{ACADEMIC_YEAR_LABEL}</p>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -154,24 +250,35 @@ export const StaffDashboardPage = () => {
             </div>
 
             <div className="grid gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick actions</CardTitle>
-                  <CardDescription>Common tasks for day-to-day updates.</CardDescription>
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b bg-muted/30 pb-4">
+                  <CardTitle className="text-base">Quick actions</CardTitle>
+                  <p className="text-xs text-muted-foreground">Click button to navigate to the page</p>
                 </CardHeader>
-                <CardContent className="grid gap-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <FileText className="h-4 w-4" />
-                    Create requisition
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Upload evidence
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Clock className="h-4 w-4" />
-                    View history
-                  </Button>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickActions.map((action) => (
+                      <Tooltip key={action.to}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-14 w-full rounded-xl border-dashed hover:border-primary/40 hover:bg-primary/5"
+                            aria-label={action.label}
+                            asChild
+                          >
+                            <Link to={action.to}>
+                              <action.icon className="h-5 w-5" />
+                            </Link>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-center">
+                          <p className="font-medium">{action.label}</p>
+                          <p className="text-xs text-muted-foreground">{action.description}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -180,6 +287,12 @@ export const StaffDashboardPage = () => {
           </div>
         </div>
       </div>
+      <footer className="border-t md:pl-72">
+        <div className="container mx-auto py-4">
+          <p className="text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Human Capital Department UNIKL Royal College Of Medicine Perak</p>
+          <p className="text-center text-xs text-muted-foreground">All rights reserved.</p>
+        </div>
+      </footer>
     </main>
   );
 };

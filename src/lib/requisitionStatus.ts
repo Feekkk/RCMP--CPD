@@ -196,6 +196,59 @@ export function formatProgrammeSlotSchedule(slot: { date: string; from: string; 
   return `${date} · ${slot.from || slot.to}`;
 }
 
+function parseProgrammeDateKey(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatProgrammeTime12h(time: string): string {
+  if (!time) return "";
+  const [hourPart, minutePart] = time.split(":");
+  const hour = Number(hourPart);
+  const minute = Number(minutePart);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return time;
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+function formatProgrammeSlotDuration(from: string, to: string): string | null {
+  if (!from || !to) return null;
+  const [fromHour, fromMinute] = from.split(":").map(Number);
+  const [toHour, toMinute] = to.split(":").map(Number);
+  if (![fromHour, fromMinute, toHour, toMinute].every(Number.isFinite)) return null;
+  const startMinutes = fromHour * 60 + fromMinute;
+  const endMinutes = toHour * 60 + toMinute;
+  const diff = endMinutes - startMinutes;
+  if (diff <= 0) return null;
+  const hours = Math.floor(diff / 60);
+  const minutes = diff % 60;
+  if (hours && minutes) return `${hours}h ${minutes}m`;
+  if (hours) return `${hours}h`;
+  return `${minutes}m`;
+}
+
+export function formatProgrammeSlotDateLong(dateStr: string): string {
+  const date = parseProgrammeDateKey(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString("en-MY", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+export function formatProgrammeSlotTimeDetail(slot: { from: string; to: string }): string {
+  if (!slot.from && !slot.to) return "Time not specified";
+  if (slot.from && slot.to) {
+    const duration = formatProgrammeSlotDuration(slot.from, slot.to);
+    const range = `${formatProgrammeTime12h(slot.from)} – ${formatProgrammeTime12h(slot.to)}`;
+    return duration ? `${range} (${duration})` : range;
+  }
+  return formatProgrammeTime12h(slot.from || slot.to);
+}
+
 export function isTrainingPast(programmeDates: string[]): boolean {
   if (!programmeDates.length) return false;
   const last = programmeDates.reduce((a, b) => (a > b ? a : b));

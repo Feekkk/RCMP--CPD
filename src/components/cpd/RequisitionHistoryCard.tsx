@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronDown, Loader2, Pencil, RotateCcw } from "lucide-react";
+import { ChevronDown, Clock, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -11,11 +11,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { resubmitRequisition, type RequisitionHistoryItem } from "@/lib/requisitionsApi";
 import {
   formatHistoryDate,
-  formatProgrammeDates,
-  formatProgrammeSlotSchedule,
+  formatProgrammeSlotDateLong,
+  formatProgrammeSlotTimeDetail,
   isTrainingPast,
   preTrainingSteps,
   statusDetailLabel,
@@ -54,6 +55,9 @@ export function RequisitionHistoryCard({
   const phaseStyles = neutralStyle
     ? TRAFFIC_LIGHT_STYLES.neutral
     : TRAFFIC_LIGHT_STYLES[workflowPhaseTrafficLight(item.workflowPhase)];
+  const programmeSlots = item.programmeSlots?.length
+    ? item.programmeSlots
+    : item.programmeDates.map((date) => ({ date, from: "", to: "" }));
 
   const resubmitMutation = useMutation({
     mutationFn: () => resubmitRequisition(item.requisitionId),
@@ -83,7 +87,7 @@ export function RequisitionHistoryCard({
                   open && "rotate-180",
                 )}
               />
-              <div className="min-w-0 grid flex-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_auto_auto_auto] sm:items-center sm:gap-4">
+              <div className="min-w-0 grid flex-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_auto_auto] sm:items-center sm:gap-4">
                 <div className="min-w-0">
                   <p className="truncate font-medium leading-snug">{item.title || "Untitled programme"}</p>
                   <p className="text-xs text-muted-foreground">{item.id}</p>
@@ -103,13 +107,6 @@ export function RequisitionHistoryCard({
                   <p className="text-xs uppercase tracking-wide">Submitted</p>
                   <p className="font-medium text-foreground">{formatHistoryDate(item.submittedAt)}</p>
                 </div>
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground sm:justify-end">
-                  <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                  <div className="sm:text-right">
-                    <p className="text-xs uppercase tracking-wide">Programme date</p>
-                    <p className="font-medium text-foreground">{formatProgrammeDates(item.programmeDates)}</p>
-                  </div>
-                </div>
               </div>
             </button>
           </CollapsibleTrigger>
@@ -125,7 +122,7 @@ export function RequisitionHistoryCard({
         </div>
 
         <CollapsibleContent>
-          <div className="grid gap-4 border-t bg-muted/10 px-4 pb-4 pt-4">
+          <div className="grid gap-3 border-t px-4 pb-4 pt-3">
             {rejectionSource && item.rejectionRemarks ? (
               <Alert className="border-border bg-muted/30">
                 <AlertTitle>Rejection remarks from {rejectionSource}</AlertTitle>
@@ -133,41 +130,58 @@ export function RequisitionHistoryCard({
               </Alert>
             ) : null}
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">Category: {item.category}</span>
               {item.venue ? <span>Venue: {item.venue}</span> : null}
               {showBudget ? <span className="font-medium text-foreground">RM {item.totalBudget.toFixed(2)}</span> : null}
               <span>Updated {formatHistoryDate(item.updatedAt)}</span>
             </div>
 
-            <div className={cn("grid gap-2 rounded-lg border border-border p-3", !neutralStyle && phaseStyles.border, "bg-background/80")}>
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {!neutralStyle ? (
-                  <span className={cn("h-2 w-2 rounded-full", TRAFFIC_LIGHT_STYLES.yellow.dot)} aria-hidden />
-                ) : null}
-                Pre-training approval
-              </p>
-              <PreTrainingStepper steps={preTrainingSteps(item.status)} neutralStyle={neutralStyle} />
-            </div>
+            <div className="rounded-md border bg-background/80 p-3">
+              {programmeSlots.length ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</p>
+                  <div className="divide-y rounded-md border text-xs">
+                    {programmeSlots.map((slot, index) => (
+                      <div
+                        key={`${slot.date}-${slot.from}-${slot.to}-${index}`}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          {programmeSlots.length > 1 ? (
+                            <span className="shrink-0 font-medium text-muted-foreground">Day {index + 1}</span>
+                          ) : null}
+                          <span className="font-medium text-foreground">{formatProgrammeSlotDateLong(slot.date)}</span>
+                        </div>
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          {formatProgrammeSlotTimeDetail(slot)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
-            {showPostTraining || postLocked ? (
-              <PostTrainingChecklist postTraining={item.postTraining} locked={postLocked} neutralStyle={neutralStyle} />
-            ) : null}
+              {programmeSlots.length ? <Separator className="my-3" /> : null}
 
-            <div className="grid gap-1 text-sm text-muted-foreground">
-              {item.programmeSlots?.length ? (
-                item.programmeSlots.map((slot, index) => (
-                  <p key={`${slot.date}-${slot.from}-${slot.to}-${index}`}>
-                    {formatProgrammeSlotSchedule(slot)}
-                  </p>
-                ))
-              ) : (
-                <p>{formatProgrammeDates(item.programmeDates)}</p>
-              )}
-              {rejectionSource && item.rejectionRemarks ? (
-                <p className="whitespace-pre-wrap">
-                  Remarks ({rejectionSource}): {item.rejectionRemarks}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Pre-training approval
                 </p>
+                <PreTrainingStepper steps={preTrainingSteps(item.status)} neutralStyle={neutralStyle} />
+              </div>
+
+              {showPostTraining || postLocked ? (
+                <>
+                  <Separator className="my-3" />
+                  <PostTrainingChecklist
+                    requisitionId={item.requisitionId}
+                    postTraining={item.postTraining}
+                    locked={postLocked}
+                    neutralStyle={neutralStyle}
+                  />
+                </>
               ) : null}
             </div>
 

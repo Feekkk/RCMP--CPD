@@ -7,8 +7,10 @@ import { requireAuth } from "./auth/requireAuth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "uploads", "requisitions");
+const postTrainingUploadsDir = path.join(__dirname, "..", "uploads", "post-training");
 
 fs.mkdirSync(uploadsDir, { recursive: true });
+fs.mkdirSync(postTrainingUploadsDir, { recursive: true });
 
 const STATUS_SAVE_DRAFT = 1;
 const STATUS_SUBMITTED = 2;
@@ -1161,6 +1163,29 @@ const upload = multer({
   },
 });
 
+const postTrainingUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, postTrainingUploadsDir),
+    filename: (req, file, cb) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId) ?? "unknown";
+      const ext = path.extname(file.originalname ?? "").toLowerCase() || ".bin";
+      const safeExt = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? ext : ".bin";
+      cb(null, `req-${requisitionId}-attendance${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname ?? "").toLowerCase();
+    const allowedExt = new Set([".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+    const mime = String(file.mimetype ?? "");
+    if (allowedExt.has(ext) || mime.startsWith("image/") || mime === "application/pdf") {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Only PDF and image files are allowed."));
+  },
+});
+
 function parseDecimal(value) {
   if (value === undefined || value === null || String(value).trim() === "") return 0;
   const n = Number.parseFloat(String(value).trim());
@@ -1630,6 +1655,271 @@ function parseRequisitionBody(req) {
     return raw;
   }
   return req.body ?? null;
+}
+
+const POST_TRAINING_DETAIL_SELECT = `
+  SELECT r.id, r.title, r.category, r.venue, r.created_at, r.updated_at,
+         rs.details AS status,
+         rd.date_1, rd.time_1, rd.time_to_1,
+         rd.date_2, rd.time_2, rd.time_to_2,
+         rd.date_3, rd.time_3, rd.time_to_3,
+         rd.date_4, rd.time_4, rd.time_to_4,
+         rd.date_5, rd.time_5, rd.time_to_5,
+         pt.attendance_attached, pt.attendance_path, pt.e_survey_filled, pt.e_survey_responses,
+         pt.hod_evaluation_filled, pt.cpd_points_counted, pt.cpd_points
+  FROM requisitions r
+  INNER JOIN requisition_status rs ON rs.id = r.status_id
+  INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+  LEFT JOIN post_training pt ON pt.requisition_id = r.id
+`;
+
+async function ensurePostTrainingRow(conn, requisitionId) {
+  const [rows] = await conn.execute(`SELECT id FROM post_training WHERE requisition_id = ?`, [requisitionId]);
+  if (!rows.length) {
+    await conn.execute(`INSERT INTO post_training (requisition_id) VALUES (?)`, [requisitionId]);
+  }
+}
+
+async function maybeCountCpdPoints(conn, requisitionId) {
+  const [rows] = await conn.execute(
+    `SELECT attendance_attached, e_survey_filled, hod_evaluation_filled, cpd_points_counted
+     FROM post_training WHERE requisition_id = ?`,
+    [requisitionId],
+  );
+  const row = rows[0];
+  if (!row || Number(row.cpd_points_counted ?? 0) === 1) return;
+  const complete =
+    Number(row.attendance_attached ?? 0) === 1 &&
+    Number(row.e_survey_filled ?? 0) === 1 &&
+    Number(row.hod_evaluation_filled ?? 0) === 1;
+  if (!complete) return;
+  await conn.execute(
+    `UPDATE post_training SET cpd_points_counted = 1, cpd_points = COALESCE(cpd_points, 0) WHERE requisition_id = ?`,
+    [requisitionId],
+  );
+}
+
+function parseSurveyResponses(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function mapPostTrainingDetail(row) {
+  const programmeSlots = extractProgrammeSlotsFromRow(row);
+  const programmeDates = programmeSlots.map((slot) => slot.date);
+  const workflowPhase = deriveWorkflowPhase(row.status, row);
+  const dates = collectProgrammeDates(row);
+  const lastDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const programmeStarted = lastDate != null && lastDate <= today;
+
+  const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
+  const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
+  const hodEvaluationFilled = Number(row.hod_evaluation_filled ?? 0) === 1;
+  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
+  const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
+  const attendancePath = row.attendance_path ? String(row.attendance_path) : null;
+
+  return {
+    requisitionId: row.id,
+    id: `REQ-${String(row.id).padStart(4, "0")}`,
+    title: row.title,
+    category: row.category,
+    venue: row.venue ?? "",
+    programmeSlots,
+    programmeDates,
+    workflowPhase,
+    locked: row.status === "approved" && !programmeStarted,
+    postTraining: {
+      attendanceAttached,
+      eSurveyFilled,
+      hodEvaluationFilled,
+      cpdPointsCounted,
+      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      completedSteps: postTrainingCompleted,
+      totalSteps: 3,
+      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+      attendanceFileName: attendancePath ? path.basename(attendancePath) : null,
+      eSurveyResponses: parseSurveyResponses(row.e_survey_responses),
+    },
+  };
+}
+
+async function fetchStaffPostTrainingDetail(pool, requisitionId, staffId) {
+  const [rows] = await pool.execute(
+    `${POST_TRAINING_DETAIL_SELECT} WHERE r.id = ? AND r.submitted_by = ?`,
+    [requisitionId, staffId],
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  if (row.status !== "approved") {
+    return { error: "Post-training is only available for approved requisitions.", status: 400 };
+  }
+  return { detail: mapPostTrainingDetail(row) };
+}
+
+function validateESurveyBody(body) {
+  const errors = [];
+  const objectivesMet = trimOrEmpty(body?.objectivesMet);
+  const satisfaction = trimOrEmpty(body?.satisfaction);
+  const wouldRecommend = trimOrEmpty(body?.wouldRecommend);
+  const comments = trimOrEmpty(body?.comments);
+
+  if (!["yes", "partially", "no"].includes(objectivesMet)) {
+    errors.push("Please indicate whether the programme met its objectives.");
+  }
+  if (!["1", "2", "3", "4", "5"].includes(satisfaction)) {
+    errors.push("Please rate your overall satisfaction.");
+  }
+  if (!["yes", "no"].includes(wouldRecommend)) {
+    errors.push("Please indicate whether you would recommend this programme.");
+  }
+
+  return {
+    errors,
+    responses: {
+      objectivesMet,
+      satisfaction,
+      wouldRecommend,
+      comments: comments || null,
+    },
+  };
+}
+
+async function submitPostTrainingSurvey(pool, { requisitionId, staffId, body }) {
+  const context = await fetchStaffPostTrainingDetail(pool, requisitionId, staffId);
+  if (!context) return { status: 404, error: "Requisition not found." };
+  if (context.error) return { status: context.status, error: context.error };
+  if (context.detail.locked) {
+    return { status: 400, error: "Post-training unlocks on or after the programme date." };
+  }
+  if (!context.detail.postTraining.attendanceAttached) {
+    return { status: 400, error: "Upload attendance evidence before submitting the e-survey." };
+  }
+  if (context.detail.postTraining.eSurveyFilled) {
+    return { status: 400, error: "E-survey has already been submitted." };
+  }
+
+  const { errors, responses } = validateESurveyBody(body);
+  if (errors.length) return { status: 400, error: errors.join(" ") };
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await ensurePostTrainingRow(conn, requisitionId);
+    await conn.execute(
+      `UPDATE post_training SET e_survey_filled = 1, e_survey_responses = ? WHERE requisition_id = ?`,
+      [JSON.stringify(responses), requisitionId],
+    );
+    await maybeCountCpdPoints(conn, requisitionId);
+    await conn.commit();
+    return { message: "E-survey submitted successfully." };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function submitPostTrainingAttendance(pool, { requisitionId, staffId, file }) {
+  const context = await fetchStaffPostTrainingDetail(pool, requisitionId, staffId);
+  if (!context) return { status: 404, error: "Requisition not found." };
+  if (context.error) return { status: context.status, error: context.error };
+  if (context.detail.locked) {
+    return { status: 400, error: "Post-training unlocks on or after the programme date." };
+  }
+  if (context.detail.postTraining.attendanceAttached) {
+    return { status: 400, error: "Attendance evidence has already been uploaded." };
+  }
+  if (!file) return { status: 400, error: "Attendance file is required." };
+
+  const relativePath = path.join("post-training", path.basename(file.path));
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await ensurePostTrainingRow(conn, requisitionId);
+    await conn.execute(
+      `UPDATE post_training SET attendance_attached = 1, attendance_path = ? WHERE requisition_id = ?`,
+      [relativePath, requisitionId],
+    );
+    await maybeCountCpdPoints(conn, requisitionId);
+    await conn.commit();
+    return { message: "Attendance evidence uploaded successfully." };
+  } catch (err) {
+    await conn.rollback();
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      /* ignore */
+    }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function fetchStaffAttendanceFilePath(pool, requisitionId, staffId) {
+  const [rows] = await pool.execute(
+    `SELECT pt.attendance_path
+     FROM post_training pt
+     INNER JOIN requisitions r ON r.id = pt.requisition_id
+     WHERE pt.requisition_id = ? AND r.submitted_by = ? AND pt.attendance_attached = 1`,
+    [requisitionId, staffId],
+  );
+  const attendancePath = rows[0]?.attendance_path;
+  if (!attendancePath) return null;
+  const uploadsRoot = path.resolve(path.join(__dirname, "..", "uploads"));
+  const resolved = path.resolve(uploadsRoot, String(attendancePath));
+  if (!resolved.startsWith(uploadsRoot + path.sep)) return null;
+  return resolved;
+}
+
+async function removePostTrainingAttendance(pool, { requisitionId, staffId }) {
+  const context = await fetchStaffPostTrainingDetail(pool, requisitionId, staffId);
+  if (!context) return { status: 404, error: "Requisition not found." };
+  if (context.error) return { status: context.status, error: context.error };
+  if (context.detail.locked) {
+    return { status: 400, error: "Post-training unlocks on or after the programme date." };
+  }
+  if (!context.detail.postTraining.attendanceAttached) {
+    return { status: 400, error: "No attendance evidence to remove." };
+  }
+  if (context.detail.postTraining.eSurveyFilled) {
+    return { status: 400, error: "Cannot remove evidence after the e-survey has been submitted." };
+  }
+
+  const filePath = await fetchStaffAttendanceFilePath(pool, requisitionId, staffId);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(
+      `UPDATE post_training
+       SET attendance_attached = 0, attendance_path = NULL, cpd_points_counted = 0
+       WHERE requisition_id = ?`,
+      [requisitionId],
+    );
+    await conn.commit();
+    if (filePath) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        /* ignore */
+      }
+    }
+    return { message: "Attendance evidence removed." };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
@@ -2205,4 +2495,144 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       return res.status(mapped.status).json({ error: mapped.error });
     }
   });
+
+  apiRouter.get("/requisitions/:requisitionId/post-training", generalLimiter, requireAuth, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const context = await fetchStaffPostTrainingDetail(pool, requisitionId, req.session.user.staffId);
+      if (!context) {
+        return res.status(404).json({ error: "Requisition not found." });
+      }
+      if (context.error) {
+        return res.status(context.status).json({ error: context.error });
+      }
+      return res.json(context.detail);
+    } catch (err) {
+      console.error("Get post-training error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.post("/requisitions/:requisitionId/post-training/e-survey", generalLimiter, requireAuth, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const result = await submitPostTrainingSurvey(pool, {
+        requisitionId,
+        staffId: req.session.user.staffId,
+        body: req.body,
+      });
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      return res.json({ message: result.message });
+    } catch (err) {
+      console.error("Post-training e-survey error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.post(
+    "/requisitions/:requisitionId/post-training/attendance",
+    generalLimiter,
+    requireAuth,
+    (req, res, next) => {
+      postTrainingUpload.single("attendance")(req, res, (err) => {
+        if (err) {
+          const mapped = mapRequisitionDbError(err);
+          return res.status(mapped.status).json({ error: mapped.error });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      try {
+        const result = await submitPostTrainingAttendance(pool, {
+          requisitionId,
+          staffId: req.session.user.staffId,
+          file: req.file,
+        });
+        if (result.error) {
+          if (req.file) {
+            try {
+              fs.unlinkSync(req.file.path);
+            } catch {
+              /* ignore */
+            }
+          }
+          return res.status(result.status).json({ error: result.error });
+        }
+        return res.json({ message: result.message });
+      } catch (err) {
+        console.error("Post-training attendance error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
+
+  apiRouter.get(
+    "/requisitions/:requisitionId/post-training/attendance",
+    generalLimiter,
+    requireAuth,
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      try {
+        const filePath = await fetchStaffAttendanceFilePath(pool, requisitionId, req.session.user.staffId);
+        if (!filePath || !fs.existsSync(filePath)) {
+          return res.status(404).json({ error: "Attendance file not found." });
+        }
+        return res.sendFile(filePath);
+      } catch (err) {
+        console.error("Download attendance error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
+
+  apiRouter.delete(
+    "/requisitions/:requisitionId/post-training/attendance",
+    generalLimiter,
+    requireAuth,
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      try {
+        const result = await removePostTrainingAttendance(pool, {
+          requisitionId,
+          staffId: req.session.user.staffId,
+        });
+        if (result.error) {
+          return res.status(result.status).json({ error: result.error });
+        }
+        return res.json({ message: result.message });
+      } catch (err) {
+        console.error("Remove attendance error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
 }

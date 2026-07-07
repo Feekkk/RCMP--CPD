@@ -16,13 +16,13 @@ export function HODTrackRequisitionPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Track Requisition</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight">My Requisition</h1>
             </div>
           </div>
 
           <RequisitionHistoryPanel
             neutralStyle
-            description="Your requisitions — expand a row for approval progress. Rejected items show HOD or HR remarks with options to edit and resubmit."
+            description="Expand a row for approval progress. Rejected items show remarks with options to edit and resubmit."
             showBudget
             editPath="/hod/requisitions"
             pageSize={100}

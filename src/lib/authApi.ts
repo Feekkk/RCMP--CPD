@@ -3,6 +3,19 @@ export type DevAccount = {
   roleName: string;
 };
 
+export type SessionUser = {
+  staffId: number;
+  fullName: string | null;
+  email: string;
+  entraId: string | null;
+  departmentId: number;
+  departmentName: string;
+  roleId: number;
+  roleName: string;
+  authProvider: string;
+  redirect: string;
+};
+
 async function parseApiError(res: Response, fallback: string) {
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   return data.error || fallback;
@@ -32,4 +45,14 @@ export async function devLogin(email: string): Promise<{ redirect: string }> {
   }
 
   return res.json() as Promise<{ ok: true; redirect: string }>;
+}
+
+export async function fetchCurrentUser(): Promise<SessionUser> {
+  const res = await fetch("/api/auth/me", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load session."));
+  }
+
+  return res.json() as Promise<SessionUser>;
 }

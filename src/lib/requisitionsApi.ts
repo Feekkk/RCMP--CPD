@@ -172,7 +172,74 @@ export type HodReviewQueueResponse = {
     total: number;
     pending: number;
     recommended: number;
+    rejectedByHod: number;
   };
+};
+
+export type HodEvaluationStatus = "upcoming" | "due" | "completed";
+
+export type HodEvaluationResponses = {
+  knowledgeApplied: "yes" | "partially" | "no";
+  performanceImpact: "1" | "2" | "3" | "4" | "5";
+  supportsDepartmentGoals: "yes" | "no";
+  comments: string | null;
+};
+
+export type HodPostTrainingQueueItem = {
+  requisitionId: number;
+  id: string;
+  title: string;
+  category: string;
+  venue: string;
+  submittedAt: string;
+  programmeDates: string[];
+  programmeSlots: HodProgrammeSlot[];
+  lastProgrammeDate: string | null;
+  evaluationDueDate: string | null;
+  evaluationStatus: HodEvaluationStatus;
+  staffName: string;
+  staffEmail: string;
+  departmentName: string | null;
+  hodEvaluationFilled: boolean;
+  staffSurveyResponses: ESurveyResponses | null;
+  hodEvaluationResponses: HodEvaluationResponses | null;
+  postTraining: PostTrainingInfo;
+};
+
+export type HodPostTrainingQueueResponse = {
+  requisitions: HodPostTrainingQueueItem[];
+  summary: {
+    total: number;
+    due: number;
+    upcoming: number;
+    completed: number;
+  };
+};
+
+export type CpdTrackStatus = "on-track" | "need-attention" | "off-track";
+
+export type HodDepartmentStaffMember = {
+  staffId: number;
+  fullName: string;
+  email: string;
+  roleId: number;
+  roleName: string;
+  cpdCompletedHours: number;
+  cpdTargetHours: number;
+  trackStatus: CpdTrackStatus;
+};
+
+export type HodDepartmentStaffResponse = {
+  departmentId: number;
+  departmentName: string;
+  staff: HodDepartmentStaffMember[];
+};
+
+export type HodEvaluationSubmission = {
+  knowledgeApplied: "yes" | "partially" | "no";
+  performanceImpact: "1" | "2" | "3" | "4" | "5";
+  supportsDepartmentGoals: "yes" | "no";
+  comments?: string;
 };
 
 export type HodReviewDecision = "recommend" | "reject";
@@ -387,6 +454,80 @@ export async function fetchHodReviewQueue(): Promise<HodReviewQueueResponse> {
   }
 
   return res.json() as Promise<HodReviewQueueResponse>;
+}
+
+export async function fetchHodRequisitionHistory({
+  phase = "all",
+  page = 1,
+  pageSize = 10,
+}: {
+  phase?: HistoryPhaseFilter;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<RequisitionHistoryResponse> {
+  const params = new URLSearchParams({
+    phase,
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  const res = await fetch(`/api/requisitions/hod/history?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load department requisitions."));
+  }
+
+  return res.json() as Promise<RequisitionHistoryResponse>;
+}
+
+export async function fetchHodPostTrainingQueue(): Promise<HodPostTrainingQueueResponse> {
+  const res = await fetch("/api/requisitions/hod/post-training-queue", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load post-training queue."));
+  }
+
+  return res.json() as Promise<HodPostTrainingQueueResponse>;
+}
+
+export async function fetchHodDepartmentStaff(): Promise<HodDepartmentStaffResponse> {
+  const res = await fetch("/api/requisitions/hod/department-staff", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load department staff."));
+  }
+
+  return res.json() as Promise<HodDepartmentStaffResponse>;
+}
+
+export async function fetchHodPostTrainingDetail(requisitionId: number): Promise<HodPostTrainingQueueItem> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/hod-evaluation`, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load evaluation details."));
+  }
+
+  return res.json() as Promise<HodPostTrainingQueueItem>;
+}
+
+export async function submitHodEvaluation(
+  requisitionId: number,
+  data: HodEvaluationSubmission,
+): Promise<{ message: string }> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/hod-evaluation`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to submit HOD evaluation."));
+  }
+
+  return res.json() as Promise<{ message: string }>;
 }
 
 export async function fetchHodReviewDetail(requisitionId: number): Promise<HodReviewQueueItem> {

@@ -21,6 +21,7 @@ import { AdminSettingsPage } from "./admin/Settings.tsx";
 import { AdminUsersPage } from "./admin/Users.tsx";
 import { AdminVerifyRequisitionPage } from "./admin/ReviewReq.tsx";
 import { HODDashboardPage } from "./HOD/Dashboard.tsx";
+import { HODCalendarPage } from "./HOD/calendar.tsx";
 import { HODHistoryPage } from "./HOD/History.tsx";
 import { HODRequisitionsPage } from "./HOD/Requisitions.tsx";
 import { HODReviewQueuePage } from "./HOD/ReviewQueue.tsx";
@@ -65,6 +66,7 @@ const App = () => (
 
           {/* HOD Routes */}
           <Route path="/hod/dashboard" element={<HODDashboardPage />} />
+          <Route path="/hod/calendar" element={<HODCalendarPage />} />
           <Route path="/hod/requisitions" element={<HODRequisitionsPage />} />
           <Route path="/hod/review-queue" element={<HODReviewQueuePage />} />
           <Route path="/hod/requisition/track" element={<HODTrackRequisitionPage />} />

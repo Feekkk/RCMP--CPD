@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { RequisitionForm } from "@/components/cpd/RequisitionForm";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,11 @@ export function HODRequisitionsPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
               <h1 className="font-display text-2xl font-bold tracking-tight">Requisitions</h1>
             </div>
-            <Button type="button" onClick={() => handleEditIdChange(null)}>
-              <FileText className="h-4 w-4" />
-              New Requisition
+            <Button asChild>
+              <Link to="/hod/requisition/track">
+                <FileText className="h-4 w-4" />
+                My Requisition
+              </Link>
             </Button>
           </div>
 

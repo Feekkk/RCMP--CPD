@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   ExternalLink,
@@ -15,9 +16,11 @@ import {
   ThumbsUp,
   User,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { FUNDING_CLAIM_OPTIONS } from "@/components/cpd/FundingClaimFields";
+import { HodPostTrainingEvaluationDialog } from "@/components/cpd/HodPostTrainingEvaluationDialog";
 import { PreTrainingStepper } from "@/components/cpd/PreTrainingStepper";
 import {
   AlertDialog,
@@ -47,8 +50,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { HODSidebar } from "@/HOD/Sidebar";
-import type { HodProgrammeSlot, HodQueueStatus, HodReviewQueueItem } from "@/lib/requisitionsApi";
-import { fetchHodReviewDetail, fetchHodReviewQueue, submitHodReview } from "@/lib/requisitionsApi";
+import { fetchCurrentUser } from "@/lib/authApi";
+import type { HodPostTrainingQueueItem, HodProgrammeSlot, HodQueueStatus, HodReviewQueueItem } from "@/lib/requisitionsApi";
+import {
+  fetchHodPostTrainingQueue,
+  fetchHodReviewDetail,
+  fetchHodReviewQueue,
+  submitHodReview,
+} from "@/lib/requisitionsApi";
 import {
   formatHistoryDate,
   formatProgrammeDates,
@@ -94,6 +103,8 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
 }
 
 type HodReviewStatusFilter = "all" | "submitted" | "pending";
+type ReviewPageTab = "pre_training" | "post_training";
+type HodPostTrainingFilter = "all" | "due" | "upcoming" | "completed";
 
 const STATUS_FILTER_TABS: {
   value: HodReviewStatusFilter;
@@ -108,6 +119,32 @@ const STATUS_FILTER_TABS: {
 function matchesStatusFilter(row: HodReviewQueueItem, filter: HodReviewStatusFilter) {
   if (filter === "all") return true;
   return statusGroupFromDb(row.status) === filter;
+}
+
+function matchesPostTrainingFilter(row: HodPostTrainingQueueItem, filter: HodPostTrainingFilter) {
+  if (filter === "all") return true;
+  return row.evaluationStatus === filter;
+}
+
+function PostTrainingStatusBadge({ status }: { status: HodPostTrainingQueueItem["evaluationStatus"] }) {
+  if (status === "completed") {
+    return (
+      <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600/90 dark:bg-emerald-700">
+        Completed
+      </Badge>
+    );
+  }
+  if (status === "due") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-500/30 bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+      >
+        Due now
+      </Badge>
+    );
+  }
+  return <Badge variant="secondary">Upcoming</Badge>;
 }
 
 function HodQueueBadge({ status }: { status: HodQueueStatus }) {
@@ -411,15 +448,43 @@ function ReviewDialog({
 
 export function HODReviewQueuePage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageTab = searchParams.get("tab") === "post_training" ? "post_training" : "pre_training";
   const [statusFilter, setStatusFilter] = React.useState<HodReviewStatusFilter>("all");
+  const [postTrainingFilter, setPostTrainingFilter] = React.useState<HodPostTrainingFilter>("all");
   const [selectedRequisitionId, setSelectedRequisitionId] = React.useState<number | null>(null);
+  const [selectedEvaluationId, setSelectedEvaluationId] = React.useState<number | null>(null);
   const [confirmRejectItem, setConfirmRejectItem] = React.useState<HodReviewQueueItem | null>(null);
   const [rejectRemarks, setRejectRemarks] = React.useState("");
+
+  const { data: currentUser } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchCurrentUser,
+  });
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["requisitions", "hod", "review-queue"],
     queryFn: fetchHodReviewQueue,
+    enabled: pageTab === "pre_training",
   });
+
+  const {
+    data: postTrainingData,
+    isLoading: isPostTrainingLoading,
+    isError: isPostTrainingError,
+    error: postTrainingError,
+  } = useQuery({
+    queryKey: ["requisitions", "hod", "post-training", "queue"],
+    queryFn: fetchHodPostTrainingQueue,
+  });
+
+  const setPageTab = (tab: ReviewPageTab) => {
+    if (tab === "post_training") {
+      setSearchParams({ tab: "post_training" });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const reviewMutation = useMutation({
     mutationFn: ({
@@ -435,6 +500,7 @@ export function HODReviewQueuePage() {
       toast.success(result.message);
       queryClient.invalidateQueries({ queryKey: ["requisitions", "hod", "review-queue"] });
       queryClient.invalidateQueries({ queryKey: ["requisitions", "hod", "detail"] });
+      queryClient.invalidateQueries({ queryKey: ["requisitions", "hod", "post-training"] });
       setSelectedRequisitionId(null);
       setConfirmRejectItem(null);
       setRejectRemarks("");
@@ -449,10 +515,17 @@ export function HODReviewQueuePage() {
     () => rows.filter((row) => matchesStatusFilter(row, statusFilter)),
     [rows, statusFilter],
   );
-  const summary = data?.summary ?? { total: 0, pending: 0, recommended: 0 };
+  const summary = data?.summary ?? { total: 0, pending: 0, recommended: 0, rejectedByHod: 0 };
+
+  const postTrainingRows = postTrainingData?.requisitions ?? [];
+  const filteredPostTrainingRows = React.useMemo(
+    () => postTrainingRows.filter((row) => matchesPostTrainingFilter(row, postTrainingFilter)),
+    [postTrainingRows, postTrainingFilter],
+  );
+  const postTrainingSummary = postTrainingData?.summary ?? { total: 0, due: 0, upcoming: 0, completed: 0 };
 
   const summaryCards: {
-    filter: HodReviewStatusFilter;
+    filter: HodReviewStatusFilter | null;
     label: string;
     value: number;
     hint: string;
@@ -483,7 +556,60 @@ export function HODReviewQueuePage() {
       icon: ThumbsUp,
       trafficLight: "green",
     },
+    {
+      filter: null,
+      label: "Rejected",
+      value: summary.rejectedByHod,
+      hint: "Rejected by HOD",
+      icon: ThumbsDown,
+      trafficLight: "red",
+    },
   ];
+
+  const postTrainingSummaryCards: {
+    filter: HodPostTrainingFilter | null;
+    label: string;
+    value: number;
+    hint: string;
+    icon: typeof ClipboardList;
+    trafficLight: keyof typeof TRAFFIC_LIGHT_STYLES;
+  }[] = [
+    {
+      filter: "all",
+      label: "Total",
+      value: postTrainingSummary.total,
+      hint: "Staff programmes attended",
+      icon: ClipboardCheck,
+      trafficLight: "neutral",
+    },
+    {
+      filter: "due",
+      label: "Due now",
+      value: postTrainingSummary.due,
+      hint: "3-month evaluation due",
+      icon: Clock,
+      trafficLight: "yellow",
+    },
+    {
+      filter: "upcoming",
+      label: "Upcoming",
+      value: postTrainingSummary.upcoming,
+      hint: "Waiting for 3-month mark",
+      icon: CalendarDays,
+      trafficLight: "neutral",
+    },
+    {
+      filter: "completed",
+      label: "Completed",
+      value: postTrainingSummary.completed,
+      hint: "Evaluation submitted",
+      icon: ThumbsUp,
+      trafficLight: "green",
+    },
+  ];
+
+  const activeSummaryCards = pageTab === "pre_training" ? summaryCards : postTrainingSummaryCards;
+  const activeFilter = pageTab === "pre_training" ? statusFilter : postTrainingFilter;
 
   const handleRecommend = (item: HodReviewQueueItem) => {
     reviewMutation.mutate({ requisitionId: item.requisitionId, decision: "recommend" });
@@ -519,43 +645,111 @@ export function HODReviewQueuePage() {
                 <ClipboardList className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  {currentUser?.departmentName ?? "Head of Department"}
+                </p>
                 <h1 className="font-display text-2xl font-bold tracking-tight">Review Queue</h1>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            {summaryCards.map((c) => {
+          <Tabs
+            value={pageTab}
+            onValueChange={(value) => setPageTab(value as ReviewPageTab)}
+            className="mt-6"
+          >
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0 sm:w-auto">
+              <TabsTrigger
+                value="pre_training"
+                className={cn(
+                  "gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium shadow-none sm:text-sm",
+                  "data-[state=active]:border-amber-500 data-[state=active]:bg-amber-500 data-[state=active]:text-white",
+                  "data-[state=inactive]:border-border data-[state=inactive]:bg-muted/50 data-[state=inactive]:text-muted-foreground",
+                )}
+              >
+                <ClipboardList className="h-4 w-4" />
+                Pre-training review
+              </TabsTrigger>
+              <TabsTrigger
+                value="post_training"
+                className={cn(
+                  "gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium shadow-none sm:text-sm",
+                  "data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground",
+                  "data-[state=inactive]:border-border data-[state=inactive]:bg-muted/50 data-[state=inactive]:text-muted-foreground",
+                )}
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Post-training evaluation
+                {postTrainingSummary.due > 0 ? (
+                  <span
+                    className={cn(
+                      "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                      pageTab === "post_training"
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                    )}
+                  >
+                    {postTrainingSummary.due}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {activeSummaryCards.map((c) => {
               const styles = TRAFFIC_LIGHT_STYLES[c.trafficLight];
-              const isActive = statusFilter === c.filter;
+              const isActive = c.filter !== null && activeFilter === c.filter;
+              const card = (
+                <Card className="border-0 bg-transparent shadow-none">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
+                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", styles.bg)}>
+                      <c.icon className={cn("h-4 w-4", styles.text)} />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-display text-2xl font-bold">{c.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{c.hint}</p>
+                  </CardContent>
+                </Card>
+              );
+
+              if (c.filter === null) {
+                return (
+                  <div
+                    key={c.label}
+                    className={cn("rounded-xl border", styles.summaryIdle)}
+                  >
+                    {card}
+                  </div>
+                );
+              }
+
               return (
                 <button
-                  key={c.filter}
+                  key={c.filter ?? c.label}
                   type="button"
-                  onClick={() => setStatusFilter(c.filter)}
+                  onClick={() => {
+                    if (c.filter === null) return;
+                    if (pageTab === "pre_training") {
+                      setStatusFilter(c.filter as HodReviewStatusFilter);
+                    } else {
+                      setPostTrainingFilter(c.filter as HodPostTrainingFilter);
+                    }
+                  }}
                   className={cn(
                     "rounded-xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    isActive ? styles.summaryActive : styles.summaryIdle,
+                    c.filter === null ? styles.summaryIdle : isActive ? styles.summaryActive : styles.summaryIdle,
                   )}
                 >
-                  <Card className="border-0 bg-transparent shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
-                      <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", styles.bg)}>
-                        <c.icon className={cn("h-4 w-4", styles.text)} />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="font-display text-2xl font-bold">{c.value}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{c.hint}</p>
-                    </CardContent>
-                  </Card>
+                  {card}
                 </button>
               );
             })}
           </div>
 
+          {pageTab === "pre_training" ? (
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Department requisitions</CardTitle>
@@ -672,6 +866,116 @@ export function HODReviewQueuePage() {
               </div>
             </CardContent>
           </Card>
+          ) : (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Post-training evaluations</CardTitle>
+              <CardDescription>
+                Complete the HOD survey 3 months after staff have attended an approved programme.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <Tabs
+                value={postTrainingFilter}
+                onValueChange={(value) => setPostTrainingFilter(value as HodPostTrainingFilter)}
+              >
+                <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
+                  {(
+                    [
+                      { value: "all", label: "All", count: postTrainingSummary.total },
+                      { value: "due", label: "Due now", count: postTrainingSummary.due },
+                      { value: "upcoming", label: "Upcoming", count: postTrainingSummary.upcoming },
+                      { value: "completed", label: "Completed", count: postTrainingSummary.completed },
+                    ] as const
+                  ).map((tab) => (
+                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5 text-xs sm:text-sm">
+                      {tab.label}
+                      <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                        {tab.count}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+
+              {isPostTrainingError ? (
+                <p className="py-8 text-center text-sm text-destructive">
+                  {postTrainingError instanceof Error ? postTrainingError.message : "Unable to load evaluations."}
+                </p>
+              ) : null}
+
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[112px]">ID</TableHead>
+                      <TableHead>Programme</TableHead>
+                      <TableHead className="hidden md:table-cell">Staff</TableHead>
+                      <TableHead className="hidden lg:table-cell">Last attended</TableHead>
+                      <TableHead className="hidden lg:table-cell">Evaluation due</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                      <TableHead className="w-[100px] text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isPostTrainingLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                          <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredPostTrainingRows.length ? (
+                      filteredPostTrainingRows.map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell className="font-medium">{row.id}</TableCell>
+                          <TableCell>
+                            <div className="grid gap-1">
+                              <p className="font-medium leading-none">{row.title}</p>
+                              <p className="text-sm text-muted-foreground md:hidden">{row.staffName}</p>
+                              {row.evaluationDueDate ? (
+                                <p className="text-sm text-muted-foreground lg:hidden">
+                                  Due: {formatHistoryDate(row.evaluationDueDate)}
+                                </p>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{row.staffName}</TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {row.lastProgrammeDate ? formatHistoryDate(row.lastProgrammeDate) : "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {row.evaluationDueDate ? formatHistoryDate(row.evaluationDueDate) : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <PostTrainingStatusBadge status={row.evaluationStatus} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedEvaluationId(row.requisitionId)}
+                            >
+                              {row.evaluationStatus === "due" ? "Evaluate" : "View"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : !isPostTrainingLoading && !isPostTrainingError ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                          {postTrainingRows.length
+                            ? "No evaluations match this filter."
+                            : "No staff programmes are ready for HOD evaluation yet."}
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+          )}
         </div>
       </div>
 
@@ -686,6 +990,14 @@ export function HODReviewQueuePage() {
           setConfirmRejectItem(item);
         }}
         isSubmitting={reviewMutation.isPending}
+      />
+
+      <HodPostTrainingEvaluationDialog
+        requisitionId={selectedEvaluationId}
+        open={selectedEvaluationId != null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEvaluationId(null);
+        }}
       />
 
       <AlertDialog

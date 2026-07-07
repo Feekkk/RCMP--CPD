@@ -86,6 +86,10 @@ function buildHistoryScope(user) {
   return { clause: "r.submitted_by = ?", params: [user.staffId] };
 }
 
+function buildDepartmentScope(departmentId) {
+  return { clause: "s.department_id = ?", params: [departmentId] };
+}
+
 function requireHod(req, res, next) {
   if (!req.session?.user?.staffId) {
     return res.status(401).json({ error: "Not signed in." });
@@ -288,6 +292,16 @@ async function queryHodReviewQueue(pool, departmentId) {
     [departmentId],
   );
 
+  const [rejectedRows] = await pool.execute(
+    `SELECT COUNT(*) AS cnt
+     FROM requisitions r
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN staff s ON s.id = r.submitted_by
+     WHERE s.department_id = ?
+       AND rs.details = 'rejected_hod'`,
+    [departmentId],
+  );
+
   const items = rows.map(mapHodReviewRow);
 
   return {
@@ -296,8 +310,198 @@ async function queryHodReviewQueue(pool, departmentId) {
       total: items.length,
       pending: items.filter((item) => item.hodStatus === "pending").length,
       recommended: items.filter((item) => item.hodStatus === "recommended").length,
+      rejectedByHod: Number(rejectedRows[0]?.cnt ?? 0),
     },
   };
+}
+
+function addMonthsToDate(dateStr, months) {
+  const [year, month, day] = String(dateStr).split("-").map(Number);
+  const date = new Date(year, month - 1 + months, day);
+  return date.toISOString().slice(0, 10);
+}
+
+function isHodEvaluationUnlocked(lastProgrammeDate) {
+  if (!lastProgrammeDate) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return addMonthsToDate(lastProgrammeDate, 3) <= today;
+}
+
+const HOD_POST_TRAINING_SELECT = `
+  SELECT r.id, r.category, r.title, r.venue, r.created_at,
+         rs.details AS status,
+         s.email AS staff_email,
+         d.department_name,
+         rd.date_1, rd.time_1, rd.time_to_1,
+         rd.date_2, rd.time_2, rd.time_to_2,
+         rd.date_3, rd.time_3, rd.time_to_3,
+         rd.date_4, rd.time_4, rd.time_to_4,
+         rd.date_5, rd.time_5, rd.time_to_5,
+         pt.attendance_attached, pt.e_survey_filled, pt.e_survey_responses,
+         pt.hod_evaluation_filled, pt.hod_evaluation_responses,
+         pt.cpd_points_counted, pt.cpd_points
+`;
+
+const HOD_POST_TRAINING_JOINS = `
+  FROM requisitions r
+  INNER JOIN requisition_status rs ON rs.id = r.status_id
+  INNER JOIN staff s ON s.id = r.submitted_by
+  INNER JOIN department_table d ON d.department_id = s.department_id
+  INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+  LEFT JOIN post_training pt ON pt.requisition_id = r.id
+`;
+
+function mapHodPostTrainingRow(row) {
+  const programmeSlots = extractProgrammeSlotsFromRow(row);
+  const programmeDates = programmeSlots.map((slot) => slot.date).filter(Boolean);
+  const lastProgrammeDate = programmeDates.length ? programmeDates.reduce((a, b) => (a > b ? a : b)) : null;
+  const evaluationDueDate = lastProgrammeDate ? addMonthsToDate(lastProgrammeDate, 3) : null;
+  const hodEvaluationFilled = Number(row.hod_evaluation_filled ?? 0) === 1;
+  const unlocked = isHodEvaluationUnlocked(lastProgrammeDate);
+  const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
+  const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
+  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
+  const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
+
+  let evaluationStatus = "upcoming";
+  if (hodEvaluationFilled) evaluationStatus = "completed";
+  else if (unlocked) evaluationStatus = "due";
+
+  return {
+    requisitionId: row.id,
+    id: `REQ-${String(row.id).padStart(4, "0")}`,
+    title: row.title,
+    category: row.category,
+    venue: row.venue ?? "",
+    submittedAt: row.created_at,
+    programmeDates,
+    programmeSlots,
+    lastProgrammeDate,
+    evaluationDueDate,
+    evaluationStatus,
+    staffName: displayNameFromEmail(row.staff_email),
+    staffEmail: row.staff_email,
+    departmentName: row.department_name ?? null,
+    hodEvaluationFilled,
+    staffSurveyResponses: parseSurveyResponses(row.e_survey_responses),
+    hodEvaluationResponses: parseSurveyResponses(row.hod_evaluation_responses),
+    postTraining: {
+      attendanceAttached,
+      eSurveyFilled,
+      hodEvaluationFilled,
+      cpdPointsCounted,
+      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      completedSteps: postTrainingCompleted,
+      totalSteps: 3,
+      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+    },
+  };
+}
+
+async function queryHodPostTrainingQueue(pool, departmentId) {
+  const [rows] = await pool.execute(
+    `${HOD_POST_TRAINING_SELECT}
+     ${HOD_POST_TRAINING_JOINS}
+     WHERE s.department_id = ?
+       AND rs.details = 'approved'
+       AND COALESCE(pt.attendance_attached, 0) = 1
+       AND COALESCE(pt.e_survey_filled, 0) = 1
+     ORDER BY r.updated_at DESC`,
+    [departmentId],
+  );
+
+  const items = rows.map(mapHodPostTrainingRow);
+
+  return {
+    requisitions: items,
+    summary: {
+      total: items.length,
+      due: items.filter((item) => item.evaluationStatus === "due").length,
+      upcoming: items.filter((item) => item.evaluationStatus === "upcoming").length,
+      completed: items.filter((item) => item.evaluationStatus === "completed").length,
+    },
+  };
+}
+
+async function fetchHodPostTrainingDetail(pool, requisitionId, departmentId) {
+  const [rows] = await pool.execute(
+    `${HOD_POST_TRAINING_SELECT}
+     ${HOD_POST_TRAINING_JOINS}
+     WHERE r.id = ? AND s.department_id = ?
+     LIMIT 1`,
+    [requisitionId, departmentId],
+  );
+  if (!rows.length) return null;
+  const item = mapHodPostTrainingRow(rows[0]);
+  if (item.postTraining.attendanceAttached !== true || item.postTraining.eSurveyFilled !== true) {
+    return { error: "Staff post-training steps must be complete before HOD evaluation.", status: 400 };
+  }
+  return item;
+}
+
+function validateHodEvaluationBody(body) {
+  const errors = [];
+  const knowledgeApplied = trimOrEmpty(body?.knowledgeApplied);
+  const performanceImpact = trimOrEmpty(body?.performanceImpact);
+  const supportsDepartmentGoals = trimOrEmpty(body?.supportsDepartmentGoals);
+  const comments = trimOrEmpty(body?.comments);
+
+  if (!["yes", "partially", "no"].includes(knowledgeApplied)) {
+    errors.push("Please indicate whether the staff applied knowledge from the programme.");
+  }
+  if (!["1", "2", "3", "4", "5"].includes(performanceImpact)) {
+    errors.push("Please rate the performance impact.");
+  }
+  if (!["yes", "no"].includes(supportsDepartmentGoals)) {
+    errors.push("Please indicate whether this supports department goals.");
+  }
+
+  return {
+    errors,
+    responses: {
+      knowledgeApplied,
+      performanceImpact,
+      supportsDepartmentGoals,
+      comments: comments || null,
+    },
+  };
+}
+
+async function submitHodEvaluation(pool, { requisitionId, departmentId, body }) {
+  const item = await fetchHodPostTrainingDetail(pool, requisitionId, departmentId);
+  if (!item) return { status: 404, error: "Requisition not found in your department." };
+  if (item.error) return { status: item.status, error: item.error };
+  if (item.hodEvaluationFilled) {
+    return { status: 400, error: "HOD evaluation has already been submitted." };
+  }
+  if (!isHodEvaluationUnlocked(item.lastProgrammeDate)) {
+    return {
+      status: 400,
+      error: `HOD evaluation unlocks 3 months after the programme date${item.evaluationDueDate ? ` (${item.evaluationDueDate})` : ""}.`,
+    };
+  }
+
+  const { errors, responses } = validateHodEvaluationBody(body);
+  if (errors.length) return { status: 400, error: errors.join(" ") };
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await ensurePostTrainingRow(conn, requisitionId);
+    await conn.execute(
+      `UPDATE post_training SET hod_evaluation_filled = 1, hod_evaluation_responses = ? WHERE requisition_id = ?`,
+      [JSON.stringify(responses), requisitionId],
+    );
+    await maybeCountCpdPoints(conn, requisitionId);
+    await conn.commit();
+    return { message: "HOD evaluation submitted successfully." };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function fetchDepartmentRequisitionForHod(pool, requisitionId, departmentId) {
@@ -1074,6 +1278,116 @@ async function queryRequisitionHistory(pool, { user, phaseFilter, page, pageSize
   );
 
   const summary = await queryHistorySummary(pool, user);
+
+  return {
+    requisitions: rows.map(mapHistoryRow),
+    total,
+    page: safePage,
+    pageSize,
+    totalPages,
+    summary,
+  };
+}
+
+async function queryDepartmentHistorySummary(pool, departmentId) {
+  const scope = buildDepartmentScope(departmentId);
+  const [rows] = await pool.execute(
+    `SELECT (${WORKFLOW_PHASE_SQL}) AS workflow_phase, COUNT(*) AS cnt
+     ${HISTORY_FROM_JOINS}
+     WHERE ${scope.clause}
+     GROUP BY workflow_phase`,
+    scope.params,
+  );
+
+  const summary = {
+    all: 0,
+    draft: 0,
+    preTraining: 0,
+    postTraining: 0,
+    completed: 0,
+    rejected: 0,
+  };
+
+  for (const row of rows) {
+    const count = Number(row.cnt ?? 0);
+    summary.all += count;
+    switch (row.workflow_phase) {
+      case "draft":
+        summary.draft = count;
+        break;
+      case "pre_training":
+        summary.preTraining = count;
+        break;
+      case "post_training":
+        summary.postTraining = count;
+        break;
+      case "completed":
+        summary.completed = count;
+        break;
+      case "rejected":
+        summary.rejected = count;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return summary;
+}
+
+async function queryDepartmentRequisitionHistory(pool, { departmentId, phaseFilter, page, pageSize }) {
+  const scope = buildDepartmentScope(departmentId);
+  const phase = buildHistoryPhaseFilter(phaseFilter);
+
+  const whereParts = [scope.clause];
+  const whereParams = [...scope.params];
+
+  if (phase.clause) {
+    whereParts.push(phase.clause);
+    whereParams.push(...phase.params);
+  }
+
+  const whereSql = whereParts.join(" AND ");
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     ${HISTORY_FROM_JOINS}
+     WHERE ${whereSql}`,
+    whereParams,
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+
+  const [rows] = await pool.execute(
+    `SELECT r.id, r.category, r.title, r.venue, r.HRDC_claimable, r.created_at, r.updated_at,
+            rs.details AS status,
+            s.email AS staff_email,
+            d.department_name,
+            b.mileage, b.accommodation, b.travel_fare, b.others,
+            rd.date_1, rd.time_1, rd.time_to_1,
+            rd.date_2, rd.time_2, rd.time_to_2,
+            rd.date_3, rd.time_3, rd.time_to_3,
+            rd.date_4, rd.time_4, rd.time_to_4,
+            rd.date_5, rd.time_5, rd.time_to_5,
+            pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled,
+            pt.cpd_points_counted, pt.cpd_points,
+            (SELECT al.remarks
+             FROM requisition_audit_log al
+             INNER JOIN requisition_status rs_rej ON rs_rej.id = al.new_status_id
+             WHERE al.requisition_id = r.id
+               AND rs_rej.details IN ('rejected', 'rejected_hod', 'rejected_hr')
+             ORDER BY al.created_at DESC
+             LIMIT 1) AS rejection_remarks
+     ${HISTORY_FROM_JOINS}
+     WHERE ${whereSql}
+     ORDER BY r.updated_at DESC
+     LIMIT ${pageSize} OFFSET ${offset}`,
+    whereParams,
+  );
+
+  const summary = await queryDepartmentHistorySummary(pool, departmentId);
 
   return {
     requisitions: rows.map(mapHistoryRow),
@@ -2054,6 +2368,144 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
       return res.json(result);
     } catch (err) {
       console.error("HOD review queue error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/hod/history", generalLimiter, requireHod, async (req, res) => {
+    try {
+      const page = parsePositiveInt(req.query.page, 1);
+      const pageSize = Math.min(parsePositiveInt(req.query.pageSize, 10) ?? 10, 100);
+      const phaseFilter = String(req.query.phase ?? req.query.status ?? "all").trim().toLowerCase();
+
+      const result = await queryDepartmentRequisitionHistory(pool, {
+        departmentId: req.session.user.departmentId,
+        phaseFilter,
+        page,
+        pageSize,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      console.error("HOD department history error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/hod/post-training-queue", generalLimiter, requireHod, async (req, res) => {
+    try {
+      const result = await queryHodPostTrainingQueue(pool, req.session.user.departmentId);
+      return res.json(result);
+    } catch (err) {
+      console.error("HOD post-training queue error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
+  const target = 40;
+  const percent = target ? (Number(completedHours) / target) * 100 : 0;
+  if (percent >= 50) return "on-track";
+  if (percent < 25 && activeRequisitions === 0) return "off-track";
+  if (percent < 50 || activeRequisitions > 0) return "need-attention";
+  return "on-track";
+}
+
+  apiRouter.get("/requisitions/hod/department-staff", generalLimiter, requireHod, async (req, res) => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT s.id, s.email, s.role_id, r.role_name,
+                COALESCE(cpd.completed_hours, 0) AS cpd_completed_hours,
+                COALESCE(active.active_count, 0) AS active_requisitions
+         FROM staff s
+         INNER JOIN role_table r ON r.role_id = s.role_id
+         LEFT JOIN (
+           SELECT r2.submitted_by AS staff_id,
+                  SUM(COALESCE(pt.cpd_points, 0)) AS completed_hours
+           FROM requisitions r2
+           INNER JOIN post_training pt ON pt.requisition_id = r2.id AND pt.cpd_points_counted = 1
+           GROUP BY r2.submitted_by
+         ) cpd ON cpd.staff_id = s.id
+         LEFT JOIN (
+           SELECT r3.submitted_by AS staff_id, COUNT(*) AS active_count
+           FROM requisitions r3
+           INNER JOIN requisition_status rs ON rs.id = r3.status_id
+           WHERE rs.details IN ('submitted', 'being_process', 'verified', 'approved')
+           GROUP BY r3.submitted_by
+         ) active ON active.staff_id = s.id
+         WHERE s.department_id = ?
+         ORDER BY s.email`,
+        [req.session.user.departmentId],
+      );
+
+      return res.json({
+        departmentId: req.session.user.departmentId,
+        departmentName: req.session.user.departmentName,
+        staff: rows.map((row) => {
+          const cpdCompletedHours = Number(row.cpd_completed_hours ?? 0);
+          const activeRequisitions = Number(row.active_requisitions ?? 0);
+          return {
+            staffId: row.id,
+            fullName: displayNameFromEmail(row.email),
+            email: row.email,
+            roleId: row.role_id,
+            roleName: row.role_name,
+            cpdCompletedHours,
+            cpdTargetHours: 40,
+            trackStatus: deriveCpdTrackStatus(cpdCompletedHours, activeRequisitions),
+          };
+        }),
+      });
+    } catch (err) {
+      console.error("HOD department staff error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/:requisitionId/hod-evaluation", generalLimiter, requireHod, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const detail = await fetchHodPostTrainingDetail(pool, requisitionId, req.session.user.departmentId);
+      if (!detail) {
+        return res.status(404).json({ error: "Requisition not found in your department." });
+      }
+      if (detail.error) {
+        return res.status(detail.status).json({ error: detail.error });
+      }
+      return res.json(detail);
+    } catch (err) {
+      console.error("HOD evaluation detail error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.post("/requisitions/:requisitionId/hod-evaluation", generalLimiter, requireHod, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const result = await submitHodEvaluation(pool, {
+        requisitionId,
+        departmentId: req.session.user.departmentId,
+        body: req.body,
+      });
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      return res.json({ message: result.message });
+    } catch (err) {
+      console.error("HOD evaluation submit error:", err);
       const mapped = mapRequisitionDbError(err);
       return res.status(mapped.status).json({ error: mapped.error });
     }

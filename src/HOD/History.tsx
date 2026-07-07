@@ -19,18 +19,18 @@ export function HODHistoryPage() {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
-                <h1 className="font-display text-2xl font-bold tracking-tight">History</h1>
+                <h1 className="font-display text-2xl font-bold tracking-tight">Department History</h1>
               </div>
             </div>
             <Button asChild>
               <Link to="/hod/requisition/track">
                 <FileSearch className="h-4 w-4" />
-                Track Requisition
+                My Requisition
               </Link>
             </Button>
           </div>
 
-          <RequisitionLogsPanel />
+          <RequisitionLogsPanel scope="department" />
         </div>
       </div>
     </main>

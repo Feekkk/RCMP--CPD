@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, Clock, FileText, History, LayoutDashboard, TrendingUp, Users } from "lucide-react";
+import { CheckCircle2, Clock, FileText, History, LayoutDashboard, TrendingUp, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ADMIN_PROGRESS_MOCK, CpdProgressOverviewCard } from "@/components/cpd/CpdProgressOverviewCard";
@@ -43,16 +43,15 @@ export const AdminDashboardPage = () => {
               <h1 className="font-display text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" className="hidden sm:inline-flex">
-                <Users className="h-4 w-4" />
-                Manage users
+              <Button variant="outline" size="icon" aria-label="Manage users" asChild>
+                <Link to="/admin/users">
+                  <Users className="h-4 w-4" />
+                </Link>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button>
+                  <Button size="icon" aria-label="Requisitions">
                     <FileText className="h-4 w-4" />
-                     Requisitions
-                    <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

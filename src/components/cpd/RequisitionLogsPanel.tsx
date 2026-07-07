@@ -13,17 +13,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
+import { fetchHodRequisitionHistory, fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatRequisitionId, statusDetailLabel } from "@/lib/requisitionStatus";
 
 const PAGE_SIZE = 20;
 
-export function RequisitionLogsPanel() {
+type RequisitionLogsPanelProps = {
+  scope?: "personal" | "department";
+  description?: string;
+};
+
+export function RequisitionLogsPanel({
+  scope = "personal",
+  description,
+}: RequisitionLogsPanelProps) {
   const [page, setPage] = React.useState(1);
+  const isDepartment = scope === "department";
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: ["requisitions", "history", "staff-logs", page],
-    queryFn: () => fetchRequisitionHistory({ phase: "all", page, pageSize: PAGE_SIZE }),
+    queryKey: ["requisitions", "history", isDepartment ? "department-logs" : "staff-logs", page],
+    queryFn: () =>
+      isDepartment
+        ? fetchHodRequisitionHistory({ phase: "all", page, pageSize: PAGE_SIZE })
+        : fetchRequisitionHistory({ phase: "all", page, pageSize: PAGE_SIZE }),
   });
 
   const rows = data?.requisitions ?? [];
@@ -40,7 +52,10 @@ export function RequisitionLogsPanel() {
             Requisition logs
           </CardTitle>
           <CardDescription>
-            Your requisitions with their current status.
+            {description ??
+              (isDepartment
+                ? "Requisitions submitted by staff in your department."
+                : "Your requisitions with their current status.")}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -63,6 +78,7 @@ export function RequisitionLogsPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Last updated</TableHead>
+                    {isDepartment ? <TableHead className="hidden sm:table-cell">Staff</TableHead> : null}
                     <TableHead>Requisition</TableHead>
                     <TableHead className="hidden sm:table-cell">Status</TableHead>
                     <TableHead>Venue</TableHead>
@@ -76,11 +92,17 @@ export function RequisitionLogsPanel() {
                       <TableCell className="whitespace-nowrap text-sm">
                         <span className="font-medium text-foreground">{formatHistoryDate(row.updatedAt)}</span>
                       </TableCell>
+                      {isDepartment ? (
+                        <TableCell className="hidden text-sm sm:table-cell">{row.staffName}</TableCell>
+                      ) : null}
                       <TableCell>
                         <p className="font-medium">{formatRequisitionId(row.requisitionId)}</p>
                         <p className="max-w-[12rem] truncate text-xs text-muted-foreground sm:max-w-xs">
                           {row.title}
                         </p>
+                        {isDepartment ? (
+                          <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">{row.staffName}</p>
+                        ) : null}
                       </TableCell>
                       <TableCell className="hidden text-sm sm:table-cell">
                         {statusDetailLabel(row.status)}
@@ -99,7 +121,7 @@ export function RequisitionLogsPanel() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-              No requisitions recorded yet.
+              {isDepartment ? "No department requisitions recorded yet." : "No requisitions recorded yet."}
             </div>
           )}
 

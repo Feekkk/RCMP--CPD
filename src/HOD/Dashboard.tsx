@@ -1,8 +1,12 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Award, CheckCircle2, ChevronDown, ClipboardList, Clock, FileText, History, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Award, CalendarCheck, CheckCircle2, ClipboardList, FileText, History, Loader2, User, Users, X } from "lucide-react";
+import { toast } from "sonner";
 
-import { CpdProgressOverviewCard, HOD_PROGRESS_MOCK } from "@/components/cpd/CpdProgressOverviewCard";
+import { HodNeedActionCard } from "@/components/cpd/HodNeedActionCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
+import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +18,159 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HODSidebar } from "@/HOD/Sidebar";
+import { fetchCurrentUser } from "@/lib/authApi";
+import {
+  fetchHodDepartmentStaff,
+  fetchHodRequisitionHistory,
+  fetchHodReviewQueue,
+  type CpdTrackStatus,
+  type HodDepartmentStaffMember,
+  type RequisitionHistoryItem,
+} from "@/lib/requisitionsApi";
+import { statusDetailLabel } from "@/lib/requisitionStatus";
+import { cn } from "@/lib/utils";
+
+const trackStatusMeta: Record<
+  CpdTrackStatus,
+  { label: string; badgeClass: string }
+> = {
+  "on-track": {
+    label: "On-track",
+    badgeClass: "border-green-500/30 bg-green-500/15 text-green-700 dark:text-green-300",
+  },
+  "need-attention": {
+    label: "Need Attention",
+    badgeClass: "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+  },
+  "off-track": {
+    label: "Off-Track",
+    badgeClass: "border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-300",
+  },
+};
+
+async function fetchAllDepartmentHistory(): Promise<RequisitionHistoryItem[]> {
+  const firstPage = await fetchHodRequisitionHistory({ phase: "all", page: 1, pageSize: 100 });
+  const items = [...firstPage.requisitions];
+  if (firstPage.totalPages > 1) {
+    const pages = await Promise.all(
+      Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+        fetchHodRequisitionHistory({ phase: "all", page: index + 2, pageSize: 100 }),
+      ),
+    );
+    for (const page of pages) items.push(...page.requisitions);
+  }
+  return items;
+}
+
+function isCurrentMonth(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function countApprovedThisMonth(history: RequisitionHistoryItem[]) {
+  return history.filter(
+    (item) =>
+      isCurrentMonth(item.updatedAt) &&
+      (item.status === "approved" || item.workflowPhase === "post_training" || item.workflowPhase === "completed"),
+  ).length;
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
+
+function showStaffHistoryToast(member: HodDepartmentStaffMember, history: RequisitionHistoryItem[]) {
+  const items = history.filter((item) => item.staffEmail === member.email);
+
+  if (!items.length) {
+    toast.custom(
+      (t) => (
+        <div className="flex w-[min(100vw-2rem,360px)] items-start gap-3 rounded-xl border bg-background p-4 shadow-lg">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <User className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-tight">{member.fullName}</p>
+            <p className="mt-1 text-sm text-muted-foreground">No requisitions submitted yet.</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => toast.dismiss(t)}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ),
+      { duration: 6000 },
+    );
+    return;
+  }
+
+  toast.custom(
+    (t) => (
+      <div className="w-[min(100vw-2rem,400px)] overflow-hidden rounded-xl border bg-background shadow-lg">
+        <div className="flex items-start justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+              {initialsFromName(member.fullName)}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-semibold leading-tight">{member.fullName}</p>
+              <p className="text-xs text-muted-foreground">{member.email}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => toast.dismiss(t)}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requisition history</p>
+          <Badge variant="secondary" className="tabular-nums">
+            {items.length}
+          </Badge>
+        </div>
+
+        <ul className="max-h-56 space-y-0 overflow-y-auto p-2">
+          {items.map((item) => (
+            <li
+              key={item.requisitionId}
+              className="rounded-lg border border-transparent px-2.5 py-2.5 transition-colors hover:border-border hover:bg-muted/40"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    {item.id}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-medium leading-snug">
+                    {item.title || "Untitled programme"}
+                  </p>
+                </div>
+                <RequisitionStatusBadge
+                  statusGroup={item.statusGroup}
+                  label={statusDetailLabel(item.status)}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ),
+    { duration: 15000 },
+  );
+}
 
 function CircularProgress({ percent, size = 128, stroke = 10 }: { percent: number; size?: number; stroke?: number }) {
   const r = (size - stroke) / 2;
@@ -23,14 +180,7 @@ function CircularProgress({ percent, size = 128, stroke = 10 }: { percent: numbe
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90" aria-hidden>
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        className="stroke-muted/40"
-        strokeWidth={stroke}
-      />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" className="stroke-muted/40" strokeWidth={stroke} />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -47,27 +197,59 @@ function CircularProgress({ percent, size = 128, stroke = 10 }: { percent: numbe
 }
 
 export const HODDashboardPage = () => {
-  const reviewQueue = 5;
-  const approvedMonth = 11;
-  const teamMembers = 24;
+  const { data: currentUser } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchCurrentUser,
+  });
+
+  const {
+    data: departmentStaff,
+    isLoading: isStaffLoading,
+    isError: isStaffError,
+  } = useQuery({
+    queryKey: ["requisitions", "hod", "department-staff"],
+    queryFn: fetchHodDepartmentStaff,
+  });
+
+  const { data: departmentHistory = [], isLoading: isHistoryLoading } = useQuery({
+    queryKey: ["requisitions", "hod", "history", "dashboard"],
+    queryFn: fetchAllDepartmentHistory,
+  });
+
+  const { data: reviewQueueData, isLoading: isReviewQueueLoading } = useQuery({
+    queryKey: ["requisitions", "hod", "review-queue", "dashboard"],
+    queryFn: fetchHodReviewQueue,
+  });
+
+  const staffList = departmentStaff?.staff ?? [];
+  const reviewQueueCount = reviewQueueData?.summary.pending ?? 0;
+  const approvedThisMonth = useMemo(() => countApprovedThisMonth(departmentHistory), [departmentHistory]);
+  const teamMembers = staffList.length;
+
+  const stats = [
+    {
+      label: "Review queue",
+      value: reviewQueueCount,
+      icon: ClipboardList,
+      isLoading: isReviewQueueLoading,
+    },
+    {
+      label: "Approved (month)",
+      value: approvedThisMonth,
+      icon: CheckCircle2,
+      isLoading: isHistoryLoading,
+    },
+    {
+      label: "Total staff",
+      value: teamMembers,
+      icon: Users,
+      isLoading: isStaffLoading,
+    },
+  ] as const;
+
   const myCpdCompleted = 14;
   const myCpdTarget = 40;
   const myCpdPercent = myCpdTarget ? Math.round((myCpdCompleted / myCpdTarget) * 100) : 0;
-
-  const stats = [
-    { label: "Review queue", value: `${reviewQueue}`, icon: ClipboardList },
-    { label: "Dept. pending", value: "3", icon: Clock },
-    { label: "Approved (month)", value: `${approvedMonth}`, icon: CheckCircle2 },
-    { label: "Team members", value: `${teamMembers}`, icon: Users },
-  ] as const;
-
-  type RowStatus = "submitted" | "pending" | "approved" | "rejected";
-  const queuePreview: Array<{ id: string; staff: string; title: string; submittedAt: string; status: RowStatus }> = [
-    { id: "REQ-0011", staff: "Wan Afiq", title: "Advanced Teaching Workshop", submittedAt: "Apr 28, 2026", status: "pending" },
-    { id: "REQ-0010", staff: "Nur Syafiqah", title: "Leadership Essentials", submittedAt: "Apr 27, 2026", status: "pending" },
-    { id: "REQ-0009", staff: "Aiman Hakim", title: "Data Governance Summit", submittedAt: "Apr 25, 2026", status: "submitted" },
-    { id: "REQ-0008", staff: "Siti Aisyah", title: "React Performance Workshop", submittedAt: "Apr 23, 2026", status: "pending" },
-  ];
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -77,16 +259,21 @@ export const HODDashboardPage = () => {
         <header className="sticky top-14 z-10 md:top-0 border-b bg-background/80 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Head of Department</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                {currentUser?.departmentName ?? "Head of Department"}
+              </p>
+              <h1 className="font-[Georgia,serif] text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" aria-label="Department calendar" asChild>
+                <Link to="/hod/calendar">
+                  <CalendarCheck className="h-4 w-4" />
+                </Link>
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button>
+                  <Button size="icon" aria-label="Requisitions">
                     <FileText className="h-4 w-4" />
-                    Requisitions
-                    <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -99,7 +286,7 @@ export const HODDashboardPage = () => {
                   <DropdownMenuItem asChild>
                     <Link to="/hod/requisition/track" className="flex items-center gap-2">
                       <History className="h-4 w-4" />
-                      Track Requisition
+                      My Requisition
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -109,7 +296,7 @@ export const HODDashboardPage = () => {
         </header>
 
         <div className="container mx-auto py-8">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {stats.map((s) => (
               <Card key={s.label}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -119,7 +306,9 @@ export const HODDashboardPage = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="font-display text-2xl font-bold">{s.value}</p>
+                  <p className="font-display text-2xl font-bold">
+                    {s.isLoading ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : s.value}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">Academic year 2025/2026</p>
                 </CardContent>
               </Card>
@@ -128,75 +317,82 @@ export const HODDashboardPage = () => {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 grid gap-4">
-              <CpdProgressOverviewCard
-                description="Track endorsements and outcomes for your department this month."
-                data={HOD_PROGRESS_MOCK}
-                monthlyLabel="Monthly endorsements"
-              />
+              <HodNeedActionCard />
 
               <Card>
-              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+              <CardHeader>
                 <div>
-                  <CardTitle>Review queue preview</CardTitle>
-                  <CardDescription>Items awaiting your department review.</CardDescription>
+                  <CardTitle>My Department</CardTitle>
+                  <CardDescription>
+                    {departmentStaff?.departmentName
+                      ? `List of staff members in ${departmentStaff.departmentName}.`
+                      : "List of staff members in your department."}
+                  </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/hod/review-queue">View all</Link>
-                </Button>
               </CardHeader>
               <CardContent>
                 <div className="rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[120px]">ID</TableHead>
-                        <TableHead>Programme</TableHead>
-                        <TableHead className="hidden md:table-cell">Staff</TableHead>
-                        <TableHead className="hidden md:table-cell">Submitted</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="hidden md:table-cell">Email</TableHead>
                         <TableHead className="text-right">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {queuePreview.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell className="font-medium">{row.id}</TableCell>
-                          <TableCell>
-                            <div className="grid gap-1">
-                              <p className="font-medium leading-none">{row.title}</p>
-                              <p className="text-sm text-muted-foreground md:hidden">{row.staff}</p>
-                              <p className="text-sm text-muted-foreground md:hidden">Submitted: {row.submittedAt}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">{row.staff}</TableCell>
-                          <TableCell className="hidden md:table-cell">{row.submittedAt}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              variant={
-                                row.status === "approved"
-                                  ? "default"
-                                  : row.status === "rejected"
-                                    ? "destructive"
-                                    : row.status === "pending"
-                                      ? "outline"
-                                      : "secondary"
-                              }
-                              className={
-                                row.status === "pending"
-                                  ? "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
-                                  : undefined
-                              }
-                            >
-                              {row.status === "submitted"
-                                ? "Submitted"
-                                : row.status === "pending"
-                                  ? "Pending"
-                                  : row.status === "approved"
-                                    ? "Approved"
-                                    : "Rejected"}
-                            </Badge>
+                      {isStaffLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="py-12 text-center text-sm text-muted-foreground">
+                            <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : isStaffError ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="py-12 text-center text-sm text-destructive">
+                            Unable to load department staff.
+                          </TableCell>
+                        </TableRow>
+                      ) : staffList.length ? (
+                        staffList.map((member) => (
+                          <TableRow
+                            key={member.staffId}
+                            className="cursor-pointer"
+                            onClick={() => showStaffHistoryToast(member, departmentHistory)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                showStaffHistoryToast(member, departmentHistory);
+                              }
+                            }}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`View requisition history for ${member.fullName}`}
+                          >
+                            <TableCell>
+                              <div className="grid gap-1">
+                                <p className="font-medium leading-none">{member.fullName}</p>
+                                <p className="text-sm text-muted-foreground md:hidden">{member.email}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-muted-foreground">{member.email}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge
+                                variant="outline"
+                                className={cn(trackStatusMeta[member.trackStatus].badgeClass)}
+                              >
+                                {trackStatusMeta[member.trackStatus].label}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={3} className="py-12 text-center text-sm text-muted-foreground">
+                            No staff found in your department.
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -209,9 +405,9 @@ export const HODDashboardPage = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Award className="h-5 w-5 text-primary" />
-                  My progress
+                  Department Progress
                 </CardTitle>
-                <CardDescription>Your CPD hours toward the annual requirement.</CardDescription>
+                <CardDescription>Training hours towards the annual requirement.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col items-center gap-5">
                 <div className="relative flex items-center justify-center">
@@ -245,6 +441,12 @@ export const HODDashboardPage = () => {
           </div>
         </div>
       </div>
+      <footer className="border-t md:pl-72">
+        <div className="container mx-auto py-4">
+          <p className="text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Human Capital Department UNIKL Royal College Of Medicine Perak</p>
+          <p className="text-center text-xs text-muted-foreground">All rights reserved.</p>
+        </div>
+      </footer>
     </main>
   );
 };

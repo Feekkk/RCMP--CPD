@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, ClipboardCheck, Gauge, LogOut, Menu } from "lucide-react";
+import { BarChart3, Gauge, LogOut, Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 const menuItems = [
   { to: "/approval/dashboard", label: "Dashboard", icon: Gauge },
   { to: "/approval/report", label: "Report", icon: BarChart3 },
-  { to: "/approval/approval", label: "Approval", icon: ClipboardCheck },
 ] as const;
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {

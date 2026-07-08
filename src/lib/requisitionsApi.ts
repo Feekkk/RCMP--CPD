@@ -690,6 +690,56 @@ export async function fetchApprovalQueue(): Promise<ApprovalQueueResponse> {
   return res.json() as Promise<ApprovalQueueResponse>;
 }
 
+export type ApprovalDashboardStats = {
+  pendingApproval: number;
+  approvedThisMonth: number;
+  rejectedThisMonth: number;
+  verifiedThisMonth: number;
+};
+
+export type ApprovalDashboardView = "pending" | "approved" | "rejected" | "verified";
+
+export async function fetchApprovalDashboardStats(): Promise<ApprovalDashboardStats> {
+  const res = await fetch("/api/requisitions/approval/dashboard-stats", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load dashboard stats."));
+  }
+
+  return res.json() as Promise<ApprovalDashboardStats>;
+}
+
+export type ApprovalDashboardItemsResponse = {
+  requisitions: ApprovalQueueItem[];
+};
+
+export async function fetchApprovalDashboardItems(
+  view: ApprovalDashboardView = "pending",
+): Promise<ApprovalDashboardItemsResponse> {
+  const params = new URLSearchParams({ view });
+  const res = await fetch(`/api/requisitions/approval/dashboard-items?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load dashboard items."));
+  }
+
+  return res.json() as Promise<ApprovalDashboardItemsResponse>;
+}
+
+export type ApprovalReportStats = AdminReportStats;
+
+export async function fetchApprovalReportStats(): Promise<ApprovalReportStats> {
+  const res = await fetch("/api/requisitions/approval/report-stats", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load report stats."));
+  }
+
+  return res.json() as Promise<ApprovalReportStats>;
+}
+
 export async function fetchApprovalDetail(requisitionId: number): Promise<ApprovalQueueItem> {
   const res = await fetch(`/api/requisitions/${requisitionId}/approval`, { credentials: "include" });
 

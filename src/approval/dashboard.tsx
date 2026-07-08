@@ -1,39 +1,123 @@
-import { CheckCircle2, Clock, FileText, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Clock, FileText, Loader2, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { ApprovalSidebar } from "@/approval/Sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatTodayDate } from "@/lib/requisitionStatus";
+import {
+  fetchApprovalDashboardItems,
+  fetchApprovalDashboardStats,
+  type ApprovalDashboardView,
+} from "@/lib/requisitionsApi";
+import { formatHistoryDate, formatTodayDate } from "@/lib/requisitionStatus";
+import { cn } from "@/lib/utils";
+
+const currentMonthLabel = new Date().toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+
+const VIEW_CONFIG: Record<
+  ApprovalDashboardView,
+  {
+    label: string;
+    hint: string;
+    panelTitle: string;
+    panelDescription: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    icon: typeof Clock;
+  }
+> = {
+  pending: {
+    label: "Pending approval",
+    hint: "Requisitions awaiting your final decision",
+    panelTitle: "Pending Final Approval",
+    panelDescription: "Requisitions verified by HR and awaiting your approval.",
+    emptyTitle: "No pending approvals",
+    emptyDescription: "All HR-verified requisitions have been reviewed.",
+    icon: Clock,
+  },
+  approved: {
+    label: "Approved (month)",
+    hint: `Management approvals in ${currentMonthLabel}`,
+    panelTitle: "Approved This Month",
+    panelDescription: "Requisitions you approved during the current month.",
+    emptyTitle: "No approvals this month",
+    emptyDescription: "Approved requisitions will appear here once decisions are recorded.",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    label: "Rejected (month)",
+    hint: `Management rejections in ${currentMonthLabel}`,
+    panelTitle: "Rejected This Month",
+    panelDescription: "Requisitions you rejected during the current month.",
+    emptyTitle: "No rejections this month",
+    emptyDescription: "Rejected requisitions will appear here once decisions are recorded.",
+    icon: TrendingUp,
+  },
+  verified: {
+    label: "Verified queue",
+    hint: `Forwarded by HR verification in ${currentMonthLabel}`,
+    panelTitle: "HR Verified This Month",
+    panelDescription: "Requisitions forwarded by HR verification during the current month.",
+    emptyTitle: "No HR-verified requisitions this month",
+    emptyDescription: "Items will appear here once HR verifies and forwards them for approval.",
+    icon: FileText,
+  },
+};
+
+function statusBadge(status: string) {
+  if (status === "approved") {
+    return <Badge variant="default">Approved</Badge>;
+  }
+  if (status === "rejected") {
+    return <Badge variant="destructive">Rejected</Badge>;
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
+    >
+      Awaiting approval
+    </Badge>
+  );
+}
 
 export function ApprovalDashboardPage() {
-  const stats = [
-    { label: "Pending approval", value: "5", icon: Clock },
-    { label: "Approved (month)", value: "12", icon: CheckCircle2 },
-    { label: "Rejected (month)", value: "1", icon: TrendingUp },
-    { label: "Verified queue", value: "5", icon: FileText },
-  ] as const;
+  const [selectedView, setSelectedView] = useState<ApprovalDashboardView>("pending");
+  const activeView = VIEW_CONFIG[selectedView];
 
-  type RecentStatus = "verified" | "approved" | "rejected";
-  const recent: Array<{ id: string; staff: string; title: string; submittedAt: string; status: RecentStatus }> = [
-    { id: "REQ-0012", staff: "Wan Afiq", title: "Advanced Teaching Workshop", submittedAt: "Apr 29, 2026", status: "verified" },
-    { id: "REQ-0011", staff: "Nur Syafiqah", title: "Leadership Essentials", submittedAt: "Apr 28, 2026", status: "verified" },
-    { id: "REQ-0010", staff: "Aiman Hakim", title: "Data Governance Summit", submittedAt: "Apr 27, 2026", status: "approved" },
-    { id: "REQ-0009", staff: "Siti Aisyah", title: "React Performance Workshop", submittedAt: "Apr 25, 2026", status: "verified" },
-  ];
+  const { data: dashboardStats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ["requisitions", "approval", "dashboard-stats"],
+    queryFn: fetchApprovalDashboardStats,
+  });
+
+  const { data: itemsData, isLoading: isItemsLoading } = useQuery({
+    queryKey: ["requisitions", "approval", "dashboard-items", selectedView],
+    queryFn: () => fetchApprovalDashboardItems(selectedView),
+  });
+
+  const statValues: Record<ApprovalDashboardView, number> = {
+    pending: dashboardStats?.pendingApproval ?? 0,
+    approved: dashboardStats?.approvedThisMonth ?? 0,
+    rejected: dashboardStats?.rejectedThisMonth ?? 0,
+    verified: dashboardStats?.verifiedThisMonth ?? 0,
+  };
+
+  const items = itemsData?.requisitions ?? [];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <main className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <ApprovalSidebar />
 
-      <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
+      <div className="flex min-w-0 flex-1 flex-col pt-14 md:pl-72 md:pt-0">
         <header className="sticky top-14 z-10 md:top-0 border-b bg-background/80 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between py-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{formatTodayDate()}</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <Button asChild>
               <Link to="/approval/approval">
@@ -46,82 +130,104 @@ export function ApprovalDashboardPage() {
 
         <div className="container mx-auto py-8">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.map((s) => (
-              <Card key={s.label}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{s.label}</CardTitle>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <s.icon className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="font-display text-2xl font-bold">{s.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Academic year 2025/2026</p>
-                </CardContent>
-              </Card>
-            ))}
+            {(Object.keys(VIEW_CONFIG) as ApprovalDashboardView[]).map((view) => {
+              const config = VIEW_CONFIG[view];
+              const isActive = selectedView === view;
+
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setSelectedView(view)}
+                  className="text-left"
+                >
+                  <Card
+                    className={cn(
+                      "h-full transition-colors hover:bg-accent/40",
+                      isActive && "border-primary ring-1 ring-primary/30",
+                    )}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">{config.label}</CardTitle>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <config.icon className="h-4 w-4" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="font-display text-2xl font-bold">
+                        {isStatsLoading ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        ) : (
+                          statValues[view]
+                        )}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{config.hint}</p>
+                    </CardContent>
+                  </Card>
+                </button>
+              );
+            })}
           </div>
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Pending final approval</CardTitle>
-              <CardDescription>Requisitions verified by HR and awaiting dean approval.</CardDescription>
+              <CardTitle>{activeView.panelTitle}</CardTitle>
+              <CardDescription>{activeView.panelDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[120px]">ID</TableHead>
-                      <TableHead>Programme</TableHead>
-                      <TableHead className="hidden md:table-cell">Staff</TableHead>
-                      <TableHead className="hidden md:table-cell">Submitted</TableHead>
-                      <TableHead className="text-right">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recent.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">{row.id}</TableCell>
-                        <TableCell>
-                          <div className="grid gap-1">
-                            <p className="font-medium leading-none">{row.title}</p>
-                            <p className="text-sm text-muted-foreground md:hidden">{row.staff}</p>
-                            <p className="text-sm text-muted-foreground md:hidden">Submitted: {row.submittedAt}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">{row.staff}</TableCell>
-                        <TableCell className="hidden md:table-cell">{row.submittedAt}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge
-                            variant={
-                              row.status === "approved"
-                                ? "default"
-                                : row.status === "rejected"
-                                  ? "destructive"
-                                  : "outline"
-                            }
-                            className={
-                              row.status === "verified"
-                                ? "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
-                                : undefined
-                            }
-                          >
-                            {row.status === "verified"
-                              ? "Awaiting approval"
-                              : row.status === "approved"
-                                ? "Approved"
-                                : "Rejected"}
-                          </Badge>
-                        </TableCell>
+              {isItemsLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : items.length === 0 ? (
+                <div className="rounded-lg border border-dashed py-12 text-center">
+                  <p className="font-medium text-foreground">{activeView.emptyTitle}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{activeView.emptyDescription}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[120px]">ID</TableHead>
+                        <TableHead>Programme</TableHead>
+                        <TableHead className="hidden md:table-cell">Staff</TableHead>
+                        <TableHead className="hidden md:table-cell">Submitted</TableHead>
+                        <TableHead className="text-right">Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((row) => (
+                        <TableRow key={row.requisitionId}>
+                          <TableCell className="font-medium">{row.id}</TableCell>
+                          <TableCell>
+                            <div className="grid gap-1">
+                              <p className="font-medium leading-none">{row.title}</p>
+                              <p className="text-sm text-muted-foreground md:hidden">{row.staffName}</p>
+                              <p className="text-sm text-muted-foreground md:hidden">
+                                Submitted: {formatHistoryDate(row.submittedAt)}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{row.staffName}</TableCell>
+                          <TableCell className="hidden md:table-cell">{formatHistoryDate(row.submittedAt)}</TableCell>
+                          <TableCell className="text-right">{statusBadge(row.status)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        <footer className="mt-auto w-full border-t">
+          <div className="container mx-auto py-4">
+            <p className="text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Human Capital Department UNIKL Royal College Of Medicine Perak</p>
+            <p className="text-center text-xs text-muted-foreground">All rights reserved.</p>
+          </div>
+        </footer>
       </div>
     </main>
   );

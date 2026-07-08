@@ -1239,6 +1239,121 @@ async function queryApprovalQueue(pool) {
   };
 }
 
+async function queryApprovalDashboardStats(pool) {
+  const [[pendingRows], [approvedRows], [rejectedRows], [verifiedRows]] = await Promise.all([
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       WHERE rs.details = 'verified'`,
+    ),
+    pool.execute(
+      `SELECT COUNT(DISTINCT al.requisition_id) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'approved'
+         AND old_rs.details = 'verified'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(
+      `SELECT COUNT(DISTINCT al.requisition_id) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'rejected'
+         AND old_rs.details = 'verified'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(
+      `SELECT COUNT(DISTINCT al.requisition_id) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'verified'
+         AND old_rs.details = 'being_process'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+  ]);
+
+  return {
+    pendingApproval: Number(pendingRows[0]?.cnt ?? 0),
+    approvedThisMonth: Number(approvedRows[0]?.cnt ?? 0),
+    rejectedThisMonth: Number(rejectedRows[0]?.cnt ?? 0),
+    verifiedThisMonth: Number(verifiedRows[0]?.cnt ?? 0),
+  };
+}
+
+function buildApprovalDashboardItemsFilter(view) {
+  switch (view) {
+    case "approved":
+      return {
+        clause: `r.id IN (
+          SELECT DISTINCT al.requisition_id
+          FROM requisition_audit_log al
+          INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+          INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+          WHERE new_rs.details = 'approved'
+            AND old_rs.details = 'verified'
+            AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+            AND MONTH(al.created_at) = MONTH(CURRENT_DATE())
+        )`,
+        orderBy: "r.updated_at DESC, r.created_at DESC",
+      };
+    case "rejected":
+      return {
+        clause: `r.id IN (
+          SELECT DISTINCT al.requisition_id
+          FROM requisition_audit_log al
+          INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+          INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+          WHERE new_rs.details = 'rejected'
+            AND old_rs.details = 'verified'
+            AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+            AND MONTH(al.created_at) = MONTH(CURRENT_DATE())
+        )`,
+        orderBy: "r.updated_at DESC, r.created_at DESC",
+      };
+    case "verified":
+      return {
+        clause: `r.id IN (
+          SELECT DISTINCT al.requisition_id
+          FROM requisition_audit_log al
+          INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+          INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+          WHERE new_rs.details = 'verified'
+            AND old_rs.details = 'being_process'
+            AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+            AND MONTH(al.created_at) = MONTH(CURRENT_DATE())
+        )`,
+        orderBy: "hr_al.created_at DESC, r.created_at DESC",
+      };
+    case "pending":
+    default:
+      return {
+        clause: "rs.details = 'verified'",
+        orderBy: "hr_al.created_at DESC, r.created_at DESC",
+      };
+  }
+}
+
+async function queryApprovalDashboardItems(pool, view) {
+  const filter = buildApprovalDashboardItemsFilter(view);
+  const [rows] = await pool.execute(
+    `${APPROVAL_DETAIL_SELECT}
+     ${APPROVAL_DETAIL_JOINS}
+     WHERE ${filter.clause}
+     ORDER BY ${filter.orderBy}`,
+  );
+
+  return {
+    requisitions: rows.map(mapApprovalRow),
+  };
+}
+
 async function queryApprovalDetail(pool, requisitionId) {
   const [rows] = await pool.execute(
     `${APPROVAL_DETAIL_SELECT}
@@ -3071,6 +3186,45 @@ function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
       return res.json(result);
     } catch (err) {
       console.error("Approval queue error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/approval/dashboard-stats", generalLimiter, requireApproval, async (req, res) => {
+    try {
+      const result = await queryApprovalDashboardStats(pool);
+      return res.json(result);
+    } catch (err) {
+      console.error("Approval dashboard stats error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/approval/dashboard-items", generalLimiter, requireApproval, async (req, res) => {
+    try {
+      const view = String(req.query.view ?? "pending").trim().toLowerCase();
+      const allowedViews = new Set(["pending", "approved", "rejected", "verified"]);
+      if (!allowedViews.has(view)) {
+        return res.status(400).json({ error: "Invalid dashboard view." });
+      }
+
+      const result = await queryApprovalDashboardItems(pool, view);
+      return res.json(result);
+    } catch (err) {
+      console.error("Approval dashboard items error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/approval/report-stats", generalLimiter, requireApproval, async (req, res) => {
+    try {
+      const result = await queryAdminReportStats(pool);
+      return res.json(result);
+    } catch (err) {
+      console.error("Approval report stats error:", err);
       const mapped = mapRequisitionDbError(err);
       return res.status(mapped.status).json({ error: mapped.error });
     }

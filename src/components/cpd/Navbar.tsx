@@ -17,8 +17,8 @@ export const Navbar = () => {
             decoding="async"
           />
           <div className="leading-tight">
-            <p className="font-display text-sm font-bold text-foreground sm:text-base">UniKL RCMP</p>
-            <p className="text-[10px] font-medium text-muted-foreground sm:text-xs">CPD Portal</p>
+            <p className="font-display text-sm font-bold text-foreground sm:text-base">UniKL Royal College Of Medicine Perak</p>
+            <p className="text-[10px] font-medium text-muted-foreground sm:text-xs">Human Capital Department</p>
           </div>
         </a>
 

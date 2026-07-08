@@ -2,15 +2,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Building2,
+  ChevronDown,
+  FileSpreadsheet,
   Info,
   LayoutList,
   Loader2,
   Plus,
   Search,
+  UserPlus,
   Users as UsersIcon,
   UserX,
 } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AdminSidebar } from "@/admin/Sidebar";
@@ -18,6 +22,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -84,6 +94,8 @@ async function parseApiError(res: Response, fallback: string) {
 
 const USERS_LIST_PATHS = ["/api/users-by-department", "/api/admin/users-by-department"] as const;
 
+const MIN_USERS_API_BUILD = 7;
+
 async function checkApiBuild(): Promise<{ ok: boolean; apiBuild?: number; message?: string }> {
   try {
     const res = await fetch("/api/ping");
@@ -94,15 +106,23 @@ async function checkApiBuild(): Promise<{ ok: boolean; apiBuild?: number; messag
     if (!res.ok) {
       return { ok: false, message: "Cannot reach /api/ping. Run npm run dev:full (not npm run dev alone)." };
     }
-    if (data.apiBuild !== 7 || data.features?.staffCrud !== true) {
+
+    const apiBuild = data.apiBuild ?? 0;
+    const hasStaffCrud = data.features?.staffCrud === true;
+    const hasUsersByDepartment = data.features?.usersByDepartment === true;
+
+    if (apiBuild < MIN_USERS_API_BUILD || !hasStaffCrud || !hasUsersByDepartment) {
       return {
         ok: false,
-        apiBuild: data.apiBuild,
+        apiBuild,
         message:
-          "Port 3001 is running an old API. Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild 7 and staffCrud true.",
+          apiBuild < MIN_USERS_API_BUILD
+            ? `Port 3001 is running an old API (apiBuild ${apiBuild}). Stop other Node processes, then run npm run dev:full. /api/ping must show apiBuild ${MIN_USERS_API_BUILD}+ with staffCrud true.`
+            : "User management API is unavailable. Restart with npm run dev:full and confirm /api/ping shows staffCrud and usersByDepartment true.",
       };
     }
-    return { ok: true, apiBuild: data.apiBuild };
+
+    return { ok: true, apiBuild };
   } catch {
     return {
       ok: false,
@@ -136,7 +156,7 @@ async function fetchUsersByDepartment(): Promise<UsersByDepartmentResponse> {
   }
 
   throw new Error(
-    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild 7.`,
+    `${lastError} Stop any old Node on port 3001, run npm run dev:full, open http://localhost:8080/api/ping — expect apiBuild ${MIN_USERS_API_BUILD}+ with staffCrud true.`,
   );
 }
 
@@ -633,18 +653,30 @@ export function AdminUsersPage() {
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Admin</p>
-                <h1 className="font-display text-2xl font-bold tracking-tight">Users</h1>
+                <h1 className="font-display text-2xl font-bold tracking-tight">Manage Staff</h1>
               </div>
             </div>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              disabled={!data}
-              onClick={() => setAddDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Add user
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" className="w-full sm:w-auto" disabled={!data}>
+                  <Plus className="h-4 w-4" />
+                  Add user
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setAddDialogOpen(true)}>
+                  <UserPlus className="h-4 w-4" />
+                  Add user
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/admin/users/bulk" className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Add bulk
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

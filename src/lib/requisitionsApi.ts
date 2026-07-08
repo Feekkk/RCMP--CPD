@@ -559,6 +559,88 @@ export async function submitHodReview(
   return res.json() as Promise<HodReviewResponse>;
 }
 
+export type AdminDashboardStats = {
+  pendingVerification: number;
+  verifiedThisMonth: number;
+  rejectedThisMonth: number;
+  totalStaff: number;
+};
+
+export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats> {
+  const res = await fetch("/api/requisitions/admin/dashboard-stats", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load dashboard stats."));
+  }
+
+  return res.json() as Promise<AdminDashboardStats>;
+}
+
+export type AdminRecentSubmissionsResponse = {
+  requisitions: RequisitionHistoryItem[];
+};
+
+export async function fetchAdminRecentSubmissions(pageSize = 5): Promise<AdminRecentSubmissionsResponse> {
+  const params = new URLSearchParams({ pageSize: String(pageSize) });
+  const res = await fetch(`/api/requisitions/admin/recent-submissions?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load recent submissions."));
+  }
+
+  return res.json() as Promise<AdminRecentSubmissionsResponse>;
+}
+
+export type AdminReportDivisionHours = {
+  staffCount: number;
+  totalHours: number;
+  averageHours: number;
+  targetHours: number;
+};
+
+export type AdminReportDepartmentPerformance = {
+  departmentId: number;
+  departmentName: string;
+  staffCount: number;
+  completion: number;
+  avgHours: number;
+  risk: "Low" | "Moderate" | "High";
+};
+
+export type AdminReportMonthlyTrend = {
+  month: string;
+  monthKey: string;
+  hours: number;
+};
+
+export type AdminReportStats = {
+  totalStaff: number;
+  compliantStaff: number;
+  cpdTargetHours: number;
+  approvedRequisitionsThisMonth: number;
+  submittedRequisitionsThisMonth: number;
+  totalTrainingHours: number;
+  participantsThisMonth: number;
+  divisionHours: {
+    academic: AdminReportDivisionHours;
+    services: AdminReportDivisionHours;
+  };
+  topDepartments: AdminReportDepartmentPerformance[];
+  monthlyTrend: AdminReportMonthlyTrend[];
+};
+
+export async function fetchAdminReportStats(): Promise<AdminReportStats> {
+  const res = await fetch("/api/requisitions/admin/report-stats", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load report stats."));
+  }
+
+  return res.json() as Promise<AdminReportStats>;
+}
+
 export async function fetchAdminVerifyQueue(): Promise<AdminVerifyQueueResponse> {
   const res = await fetch("/api/requisitions/admin/verify-queue", { credentials: "include" });
 

@@ -67,6 +67,119 @@ function displayNameFromEmail(email) {
   return local.replace(/[._-]+/g, " ").trim() || email;
 }
 
+const ACADEMIC_DEPARTMENT_PATTERNS = [
+  /PROGRAMME/,
+  /\bPROG\b/,
+  /BASED DEPT/,
+  /RESEARCH/,
+  /ACADEMIC SERVICES/,
+  /NURSING/,
+  /PHARMACY/,
+  /PHYSIOTHERAPY/,
+  /PSYCHOLOGY/,
+  /FOUNDATION IN MEDICAL/,
+  /PRE-CLINICAL/,
+  /MEDICAL IMAGING/,
+  /LABORATORY DEPT/,
+];
+
+function resolveStaffDivisionType(division, departmentName) {
+  const normalizedDivision = String(division ?? "").trim().toLowerCase();
+  if (normalizedDivision.includes("academic")) return "academic";
+  if (normalizedDivision.includes("service") || normalizedDivision.includes("corporate")) return "services";
+
+  const department = String(departmentName ?? "").toUpperCase();
+  if (ACADEMIC_DEPARTMENT_PATTERNS.some((pattern) => pattern.test(department))) return "academic";
+  return "services";
+}
+
+function buildDivisionHoursSummary(rows, targetHours) {
+  const totals = {
+    academic: { staffCount: 0, totalHours: 0 },
+    services: { staffCount: 0, totalHours: 0 },
+  };
+
+  for (const row of rows) {
+    const divisionType = resolveStaffDivisionType(row.division, row.department_name);
+    const completedHours = Number(row.completed_hours ?? 0);
+    totals[divisionType].staffCount += 1;
+    totals[divisionType].totalHours += completedHours;
+  }
+
+  return {
+    academic: {
+      staffCount: totals.academic.staffCount,
+      totalHours: totals.academic.totalHours,
+      averageHours:
+        totals.academic.staffCount > 0
+          ? Math.round((totals.academic.totalHours / totals.academic.staffCount) * 10) / 10
+          : 0,
+      targetHours,
+    },
+    services: {
+      staffCount: totals.services.staffCount,
+      totalHours: totals.services.totalHours,
+      averageHours:
+        totals.services.staffCount > 0
+          ? Math.round((totals.services.totalHours / totals.services.staffCount) * 10) / 10
+          : 0,
+      targetHours,
+    },
+  };
+}
+
+function deriveDepartmentRisk(completionRate) {
+  if (completionRate >= 75) return "Low";
+  if (completionRate >= 50) return "Moderate";
+  return "High";
+}
+
+function buildTopDepartments(rows, limit = 5) {
+  return rows
+    .map((row) => {
+      const staffCount = Number(row.staff_count ?? 0);
+      const totalHours = Number(row.total_hours ?? 0);
+      const compliantCount = Number(row.compliant_count ?? 0);
+      const completion = staffCount > 0 ? Math.round((compliantCount / staffCount) * 100) : 0;
+      const avgHours = staffCount > 0 ? Math.round((totalHours / staffCount) * 10) / 10 : 0;
+
+      return {
+        departmentId: row.department_id,
+        departmentName: row.department_name,
+        staffCount,
+        completion,
+        avgHours,
+        risk: deriveDepartmentRisk(completion),
+      };
+    })
+    .filter((department) => department.staffCount > 0)
+    .sort((a, b) => b.completion - a.completion || b.avgHours - a.avgHours)
+    .slice(0, limit);
+}
+
+function buildMonthlyTrend(rows) {
+  const hoursByMonth = new Map(
+    rows.map((row) => [String(row.month_key), Number(row.hours ?? 0)]),
+  );
+  const months = [];
+
+  for (let offset = 3; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    date.setMonth(date.getMonth() - offset);
+
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    months.push({
+      month: date.toLocaleDateString("en-MY", { month: "short" }),
+      monthKey,
+      hours: hoursByMonth.get(monthKey) ?? 0,
+    });
+  }
+
+  return months;
+}
+
 function parsePositiveInt(value, fallback = null) {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
   const n = Number.parseInt(String(value).trim(), 10);
@@ -88,6 +201,10 @@ function buildHistoryScope(user) {
 
 function buildDepartmentScope(departmentId) {
   return { clause: "s.department_id = ?", params: [departmentId] };
+}
+
+function buildAdminHistoryScope() {
+  return { clause: "rs.details <> 'save_draft'", params: [] };
 }
 
 function requireHod(req, res, next) {
@@ -663,6 +780,206 @@ function mapAdminVerifyRow(row) {
           remarks: row.hod_remarks ?? null,
         }
       : null,
+  };
+}
+
+async function queryAdminRecentSubmissions(pool, pageSize = 5) {
+  const scope = buildAdminHistoryScope();
+
+  const [rows] = await pool.execute(
+    `SELECT r.id, r.category, r.title, r.venue, r.HRDC_claimable, r.created_at, r.updated_at,
+            rs.details AS status,
+            s.email AS staff_email,
+            d.department_name,
+            b.mileage, b.accommodation, b.travel_fare, b.others,
+            rd.date_1, rd.time_1, rd.time_to_1,
+            rd.date_2, rd.time_2, rd.time_to_2,
+            rd.date_3, rd.time_3, rd.time_to_3,
+            rd.date_4, rd.time_4, rd.time_to_4,
+            rd.date_5, rd.time_5, rd.time_to_5,
+            pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled,
+            pt.cpd_points_counted, pt.cpd_points,
+            (SELECT al.remarks
+             FROM requisition_audit_log al
+             INNER JOIN requisition_status rs_rej ON rs_rej.id = al.new_status_id
+             WHERE al.requisition_id = r.id
+               AND rs_rej.details IN ('rejected', 'rejected_hod', 'rejected_hr')
+             ORDER BY al.created_at DESC
+             LIMIT 1) AS rejection_remarks
+     ${HISTORY_FROM_JOINS}
+     WHERE ${scope.clause}
+     ORDER BY r.created_at DESC
+     LIMIT ${pageSize}`,
+    scope.params,
+  );
+
+  return rows.map(mapHistoryRow);
+}
+
+async function queryAdminDashboardStats(pool) {
+  const [[pendingRows], [verifiedRows], [rejectedRows], [staffRows]] = await Promise.all([
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       WHERE rs.details = 'being_process'`,
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'verified'
+         AND old_rs.details = 'being_process'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status old_rs ON old_rs.id = al.old_status_id
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'rejected_hr'
+         AND old_rs.details = 'being_process'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(`SELECT COUNT(*) AS cnt FROM staff`),
+  ]);
+
+  return {
+    pendingVerification: Number(pendingRows[0]?.cnt ?? 0),
+    verifiedThisMonth: Number(verifiedRows[0]?.cnt ?? 0),
+    rejectedThisMonth: Number(rejectedRows[0]?.cnt ?? 0),
+    totalStaff: Number(staffRows[0]?.cnt ?? 0),
+  };
+}
+
+const CPD_TARGET_HOURS = 40;
+
+async function queryAdminReportStats(pool) {
+  const [
+    [totalStaffRows],
+    [compliantStaffRows],
+    [approvedRows],
+    [submittedRows],
+    [hoursRows],
+    [participantsRows],
+    [divisionStaffRows],
+    [departmentRows],
+    [monthlyTrendRows],
+  ] = await Promise.all([
+    pool.execute(`SELECT COUNT(*) AS cnt FROM staff`),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM staff s
+       LEFT JOIN (
+         SELECT r2.submitted_by AS staff_id,
+                SUM(COALESCE(pt.cpd_points, 0)) AS completed_hours
+         FROM requisitions r2
+         INNER JOIN post_training pt ON pt.requisition_id = r2.id AND pt.cpd_points_counted = 1
+         GROUP BY r2.submitted_by
+       ) cpd ON cpd.staff_id = s.id
+       WHERE COALESCE(cpd.completed_hours, 0) >= ?`,
+      [CPD_TARGET_HOURS],
+    ),
+    pool.execute(
+      `SELECT COUNT(DISTINCT al.requisition_id) AS cnt
+       FROM requisition_audit_log al
+       INNER JOIN requisition_status new_rs ON new_rs.id = al.new_status_id
+       WHERE new_rs.details = 'approved'
+         AND YEAR(al.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(al.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       WHERE rs.details <> 'save_draft'
+         AND YEAR(r.created_at) = YEAR(CURRENT_DATE())
+         AND MONTH(r.created_at) = MONTH(CURRENT_DATE())`,
+    ),
+    pool.execute(
+      `SELECT COALESCE(SUM(pt.cpd_points), 0) AS total_hours
+       FROM post_training pt
+       WHERE pt.cpd_points_counted = 1`,
+    ),
+    pool.execute(
+      `SELECT COUNT(DISTINCT r.submitted_by) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+       WHERE rs.details = 'approved'
+         AND (
+           DATE_FORMAT(rd.date_1, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')
+           OR DATE_FORMAT(rd.date_2, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')
+           OR DATE_FORMAT(rd.date_3, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')
+           OR DATE_FORMAT(rd.date_4, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')
+           OR DATE_FORMAT(rd.date_5, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')
+         )`,
+    ),
+    pool.execute(
+      `SELECT s.division, d.department_name,
+              COALESCE(cpd.completed_hours, 0) AS completed_hours
+       FROM staff s
+       INNER JOIN department_table d ON d.department_id = s.department_id
+       LEFT JOIN (
+         SELECT r2.submitted_by AS staff_id,
+                SUM(COALESCE(pt.cpd_points, 0)) AS completed_hours
+         FROM requisitions r2
+         INNER JOIN post_training pt ON pt.requisition_id = r2.id AND pt.cpd_points_counted = 1
+         GROUP BY r2.submitted_by
+       ) cpd ON cpd.staff_id = s.id`,
+    ),
+    pool.execute(
+      `SELECT d.department_id, d.department_name,
+              COUNT(s.id) AS staff_count,
+              COALESCE(SUM(cpd.completed_hours), 0) AS total_hours,
+              SUM(CASE WHEN COALESCE(cpd.completed_hours, 0) >= ? THEN 1 ELSE 0 END) AS compliant_count
+       FROM department_table d
+       LEFT JOIN staff s ON s.department_id = d.department_id
+       LEFT JOIN (
+         SELECT r2.submitted_by AS staff_id,
+                SUM(COALESCE(pt.cpd_points, 0)) AS completed_hours
+         FROM requisitions r2
+         INNER JOIN post_training pt ON pt.requisition_id = r2.id AND pt.cpd_points_counted = 1
+         GROUP BY r2.submitted_by
+       ) cpd ON cpd.staff_id = s.id
+       GROUP BY d.department_id, d.department_name`,
+      [CPD_TARGET_HOURS],
+    ),
+    pool.execute(
+      `SELECT DATE_FORMAT(pt.updated_at, '%Y-%m') AS month_key,
+              COALESCE(SUM(pt.cpd_points), 0) AS hours
+       FROM post_training pt
+       WHERE pt.cpd_points_counted = 1
+         AND pt.updated_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 3 MONTH)
+       GROUP BY month_key
+       ORDER BY month_key`,
+    ),
+  ]);
+
+  const totalStaff = Number(totalStaffRows[0]?.cnt ?? 0);
+  const compliantStaff = Number(compliantStaffRows[0]?.cnt ?? 0);
+  const approvedRequisitionsThisMonth = Number(approvedRows[0]?.cnt ?? 0);
+  const submittedRequisitionsThisMonth = Number(submittedRows[0]?.cnt ?? 0);
+  const totalTrainingHours = Number(hoursRows[0]?.total_hours ?? 0);
+  const participantsThisMonth = Number(participantsRows[0]?.cnt ?? 0);
+  const divisionHours = buildDivisionHoursSummary(divisionStaffRows, CPD_TARGET_HOURS);
+  const topDepartments = buildTopDepartments(departmentRows, 5);
+  const monthlyTrend = buildMonthlyTrend(monthlyTrendRows);
+
+  return {
+    totalStaff,
+    compliantStaff,
+    cpdTargetHours: CPD_TARGET_HOURS,
+    approvedRequisitionsThisMonth,
+    submittedRequisitionsThisMonth,
+    totalTrainingHours,
+    participantsThisMonth,
+    divisionHours,
+    topDepartments,
+    monthlyTrend,
   };
 }
 
@@ -2605,6 +2922,40 @@ function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
       });
     } catch (err) {
       console.error("HOD review error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/admin/dashboard-stats", generalLimiter, requireAdmin, async (req, res) => {
+    try {
+      const result = await queryAdminDashboardStats(pool);
+      return res.json(result);
+    } catch (err) {
+      console.error("Admin dashboard stats error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/admin/recent-submissions", generalLimiter, requireAdmin, async (req, res) => {
+    try {
+      const pageSize = Math.min(parsePositiveInt(req.query.pageSize, 5) ?? 5, 20);
+      const requisitions = await queryAdminRecentSubmissions(pool, pageSize);
+      return res.json({ requisitions });
+    } catch (err) {
+      console.error("Admin recent submissions error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/admin/report-stats", generalLimiter, requireAdmin, async (req, res) => {
+    try {
+      const result = await queryAdminReportStats(pool);
+      return res.json(result);
+    } catch (err) {
+      console.error("Admin report stats error:", err);
       const mapped = mapRequisitionDbError(err);
       return res.status(mapped.status).json({ error: mapped.error });
     }

@@ -19,6 +19,7 @@ import { AdminReportPage } from "./admin/Report.tsx";
 import { AdminRequisitionsPage } from "./admin/Requisitions.tsx";
 import { AdminSettingsPage } from "./admin/Settings.tsx";
 import { AdminUsersPage } from "./admin/Users.tsx";
+import { AdminBulkUsersPage } from "./admin/BulkUsers.tsx";
 import { AdminVerifyRequisitionPage } from "./admin/ReviewReq.tsx";
 import { HODDashboardPage } from "./HOD/Dashboard.tsx";
 import { HODCalendarPage } from "./HOD/calendar.tsx";
@@ -63,6 +64,7 @@ const App = () => (
           <Route path="/admin/requisition/track" element={<AdminTrackRequisitionPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/users/bulk" element={<AdminBulkUsersPage />} />
 
           {/* HOD Routes */}
           <Route path="/hod/dashboard" element={<HODDashboardPage />} />

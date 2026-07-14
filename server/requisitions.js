@@ -135,7 +135,7 @@ function deriveDepartmentRisk(completionRate) {
 }
 
 function buildTopDepartments(rows, limit = 5) {
-  return rows
+  const departments = rows
     .map((row) => {
       const staffCount = Number(row.staff_count ?? 0);
       const totalHours = Number(row.total_hours ?? 0);
@@ -152,9 +152,10 @@ function buildTopDepartments(rows, limit = 5) {
         risk: deriveDepartmentRisk(completion),
       };
     })
-    .filter((department) => department.staffCount > 0)
-    .sort((a, b) => b.completion - a.completion || b.avgHours - a.avgHours)
-    .slice(0, limit);
+    .sort((a, b) => b.completion - a.completion || b.avgHours - a.avgHours || a.departmentName.localeCompare(b.departmentName));
+
+  if (limit == null) return departments;
+  return departments.filter((department) => department.staffCount > 0).slice(0, limit);
 }
 
 function buildMonthlyTrend(rows) {
@@ -966,7 +967,8 @@ async function queryAdminReportStats(pool) {
   const totalTrainingHours = Number(hoursRows[0]?.total_hours ?? 0);
   const participantsThisMonth = Number(participantsRows[0]?.cnt ?? 0);
   const divisionHours = buildDivisionHoursSummary(divisionStaffRows, CPD_TARGET_HOURS);
-  const topDepartments = buildTopDepartments(departmentRows, 5);
+  const departments = buildTopDepartments(departmentRows, null);
+  const topDepartments = departments.filter((department) => department.staffCount > 0).slice(0, 5);
   const monthlyTrend = buildMonthlyTrend(monthlyTrendRows);
 
   return {
@@ -978,6 +980,7 @@ async function queryAdminReportStats(pool) {
     totalTrainingHours,
     participantsThisMonth,
     divisionHours,
+    departments,
     topDepartments,
     monthlyTrend,
   };

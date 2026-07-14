@@ -58,9 +58,12 @@ type StaffMember = {
   staffId: number;
   fullName: string;
   email: string;
-  departmentId: number;
+  empno?: string | null;
+  division?: string | null;
+  departmentId: number | null;
   roleId: number;
   roleName: string;
+  isIncomplete?: boolean;
 };
 
 type DepartmentGroup = {
@@ -76,10 +79,12 @@ type UsersByDepartmentResponse = {
   roles: RoleOption[];
   departments: DepartmentGroup[];
   departmentsWithoutHod: Array<{ departmentId: number; departmentName: string }>;
+  incompleteStaff?: StaffMember[];
   summary: {
     totalDepartments: number;
     totalStaff: number;
     departmentsWithoutHodCount: number;
+    incompleteStaffCount?: number;
   };
 };
 
@@ -181,21 +186,23 @@ function DepartmentSelect({
   onChange,
   disabled,
   className,
+  placeholder = "Select department",
 }: {
-  value: number;
+  value: number | null;
   options: DepartmentOption[];
   onChange: (id: number) => void;
   disabled?: boolean;
   className?: string;
+  placeholder?: string;
 }) {
   return (
     <Select
-      value={String(value)}
+      value={value != null ? String(value) : undefined}
       onValueChange={(v) => onChange(Number(v))}
       disabled={disabled}
     >
       <SelectTrigger className={cn("h-8 text-xs", className)}>
-        <SelectValue />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="max-h-[min(50vh,280px)]">
         {options.map((d) => (
@@ -289,6 +296,7 @@ function StaffTable({
                   value={deptId}
                   options={departmentOptions}
                   disabled={isUpdating}
+                  placeholder={member.isIncomplete || deptId == null ? "Assign department" : undefined}
                   onChange={(id) => {
                     if (id !== deptId) onUpdateStaff(member.staffId, { departmentId: id });
                   }}
@@ -510,6 +518,7 @@ export function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState("");
   const [showOnlyMissingHod, setShowOnlyMissingHod] = React.useState(false);
+  const [showIncomplete, setShowIncomplete] = React.useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] = React.useState<number | null>(null);
   const [activeTab, setActiveTab] = React.useState<"browse" | "results">("browse");
   const [addDialogOpen, setAddDialogOpen] = React.useState(false);
@@ -627,9 +636,28 @@ export function AdminUsersPage() {
   }, [isSearchActive, searchResultRows.length]);
 
   const missingHod = data?.departmentsWithoutHod ?? [];
+  const incompleteStaff = data?.incompleteStaff ?? [];
+  const incompleteCount = data?.summary.incompleteStaffCount ?? incompleteStaff.length;
+
+  const incompleteRows = React.useMemo((): FlatStaffRow[] => {
+    return incompleteStaff
+      .map((member) => ({
+        ...member,
+        departmentName: "Unassigned",
+      }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [incompleteStaff]);
 
   const selectDepartment = (id: number) => {
     setSelectedDepartmentId(id);
+    setShowIncomplete(false);
+    setActiveTab("browse");
+  };
+
+  const openIncompleteStaff = () => {
+    setShowIncomplete(true);
+    setShowOnlyMissingHod(false);
+    setSearch("");
     setActiveTab("browse");
   };
 
@@ -715,6 +743,7 @@ export function AdminUsersPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="font-display text-2xl font-bold tracking-tight">{data.summary.totalStaff}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">All staff accounts in the system</p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -723,20 +752,38 @@ export function AdminUsersPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="font-display text-2xl font-bold tracking-tight">{data.summary.totalDepartments}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Active departments with staff records</p>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card
+                  role="button"
+                  tabIndex={0}
+                  className={cn(
+                    "cursor-pointer transition-colors hover:border-yellow-500/40",
+                    showIncomplete && "border-yellow-500/50 bg-yellow-500/5",
+                  )}
+                  onClick={openIncompleteStaff}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openIncompleteStaff();
+                    }
+                  }}
+                >
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Without HOD</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Incomplete details</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p
                       className={cn(
                         "font-display text-2xl font-bold tracking-tight",
-                        data.summary.departmentsWithoutHodCount > 0 && "text-yellow-700 dark:text-yellow-300",
+                        incompleteCount > 0 && "text-yellow-700 dark:text-yellow-300",
                       )}
                     >
-                      {data.summary.departmentsWithoutHodCount}
+                      {incompleteCount}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Click to assign departments for incomplete staff
                     </p>
                   </CardContent>
                 </Card>
@@ -750,6 +797,29 @@ export function AdminUsersPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4">
+                  {showIncomplete ? (
+                    <div className="grid gap-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-medium">Staff missing department</p>
+                          <p className="text-sm text-muted-foreground">
+                            Assign a department for each row. They leave this list once updated.
+                          </p>
+                        </div>
+                        <Button type="button" variant="outline" onClick={() => setShowIncomplete(false)}>
+                          Back to directory
+                        </Button>
+                      </div>
+                      <div className="rounded-lg border">
+                        <ScrollArea className="h-[min(58vh,520px)]">
+                          <div className="p-2">
+                            <StaffTable rows={incompleteRows} showDepartment {...tableEditProps} />
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -900,6 +970,8 @@ export function AdminUsersPage() {
                         </div>
                       </TabsContent>
                     </Tabs>
+                  )}
+                    </>
                   )}
                 </CardContent>
               </Card>

@@ -627,6 +627,7 @@ export type AdminReportStats = {
     academic: AdminReportDivisionHours;
     services: AdminReportDivisionHours;
   };
+  departments?: AdminReportDepartmentPerformance[];
   topDepartments: AdminReportDepartmentPerformance[];
   monthlyTrend: AdminReportMonthlyTrend[];
 };

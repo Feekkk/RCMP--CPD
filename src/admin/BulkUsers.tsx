@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
@@ -25,8 +25,7 @@ import { cn } from "@/lib/utils";
 
 const DEFAULT_ROLE_ID = 1;
 const DEFAULT_ROLE_NAME = "Staff";
-const DEPARTMENT_PENDING_LABEL = "Assign later";
-
+const USERS_QUERY_KEY = ["admin", "users-by-department"] as const;
 const USERS_LIST_PATHS = ["/api/users-by-department", "/api/admin/users-by-department"] as const;
 
 type DepartmentOption = { departmentId: number; departmentName: string };
@@ -46,17 +45,34 @@ type ParsedRow = {
   roleId: number;
   roleName: string;
   valid: boolean;
+  needsDepartment: boolean;
   issue?: string;
 };
 
-const TEMPLATE_CSV = `empno,email,department,division
-EMP001,staff1@unikl.edu.my,INFORMATION TECH DEPT,Corporate Services
-EMP002,staff2@unikl.edu.my,HUMAN CAPITAL DEPT,Human Capital
-EMP003,staff3@unikl.edu.my,,`;
+type BulkImportResult = {
+  summary: {
+    total: number;
+    created: number;
+    skipped: number;
+    failed: number;
+    pendingDepartment?: number;
+  };
+  results: Array<{
+    index: number;
+    email: string;
+    empno?: string;
+    staffId?: number;
+    status: "created" | "skipped" | "failed";
+    error?: string;
+    pendingDepartment?: boolean;
+  }>;
+  message?: string;
+  error?: string;
+};
 
 async function fetchDepartmentOptions(): Promise<DepartmentOption[]> {
   for (const path of USERS_LIST_PATHS) {
-    const res = await fetch(path);
+    const res = await fetch(path, { credentials: "include" });
     if (!res.ok) continue;
     const data = (await res.json()) as UsersByDepartmentResponse;
     return data.departments.map((department) => ({
@@ -65,6 +81,29 @@ async function fetchDepartmentOptions(): Promise<DepartmentOption[]> {
     }));
   }
   return [];
+}
+
+async function importBulkUsers(
+  users: Array<{
+    empno: string;
+    email: string;
+    departmentId: number | null;
+    division: string;
+    roleId: number;
+  }>,
+): Promise<BulkImportResult> {
+  const res = await fetch("/api/staff/bulk", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ users }),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as BulkImportResult;
+  if (!res.ok && !data.summary) {
+    throw new Error(data.error || `Import failed (${res.status}).`);
+  }
+  return data;
 }
 
 function buildDepartmentLookup(departments: DepartmentOption[]) {
@@ -79,23 +118,25 @@ function resolveDepartment(raw: string, lookup: Map<string, DepartmentOption>) {
   const trimmed = raw.trim();
   if (!trimmed) {
     return {
-      departmentId: null,
-      departmentLabel: DEPARTMENT_PENDING_LABEL,
+      departmentId: null as number | null,
+      departmentLabel: "",
+      needsDepartment: true,
     };
   }
 
   const match = lookup.get(trimmed.toLowerCase());
   if (!match) {
     return {
-      departmentId: null,
+      departmentId: null as number | null,
       departmentLabel: trimmed,
-      issue: `Unknown department: ${trimmed}`,
+      needsDepartment: true,
     };
   }
 
   return {
     departmentId: match.departmentId,
     departmentLabel: match.departmentName,
+    needsDepartment: false,
   };
 }
 
@@ -119,22 +160,27 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
 
   if (empnoIdx === -1 || emailIdx === -1) return [];
 
+  const seenEmails = new Map<string, number>();
+
   return lines.slice(1).map((line, index) => {
     const columns = parseCsvLine(line);
     const empno = columns[empnoIdx] ?? "";
-    const email = columns[emailIdx] ?? "";
+    const email = (columns[emailIdx] ?? "").trim().toLowerCase();
     const division = divisionIdx === -1 ? "" : (columns[divisionIdx] ?? "");
     const departmentInput = departmentIdx === -1 ? "" : (columns[departmentIdx] ?? "");
     const department = resolveDepartment(departmentInput, lookup);
 
-    const baseValid = empno.length > 0 && email.includes("@");
-    const valid = baseValid && !department.issue;
-
     let issue: string | undefined;
-    if (!empno.length || !email.includes("@")) {
-      issue = "Missing empno or invalid email";
-    } else if (department.issue) {
-      issue = department.issue;
+    if (!empno.length) {
+      issue = "Missing empno";
+    } else if (!email.includes("@")) {
+      issue = "Invalid email";
+    } else if (seenEmails.has(email)) {
+      issue = `Duplicate email (also on line ${seenEmails.get(email)})`;
+    }
+
+    if (email.includes("@") && !seenEmails.has(email)) {
+      seenEmails.set(email, index + 2);
     }
 
     return {
@@ -147,14 +193,21 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
       departmentLabel: department.departmentLabel,
       roleId: DEFAULT_ROLE_ID,
       roleName: DEFAULT_ROLE_NAME,
-      valid,
+      valid: !issue,
+      needsDepartment: !issue && department.needsDepartment,
       issue,
     };
   });
 }
 
-function downloadTemplate() {
-  const blob = new Blob([TEMPLATE_CSV], { type: "text/csv;charset=utf-8" });
+function downloadTemplate(departments: DepartmentOption[]) {
+  const sampleDept = departments[0]?.departmentName ?? "ACADEMIC SERVICES (FOM)";
+  const sampleDept2 = departments[1]?.departmentName ?? sampleDept;
+  const csv = `empno,email,department,division
+EMP001,staff1@unikl.edu.my,${sampleDept},Academic
+EMP002,staff2@unikl.edu.my,${sampleDept2},Services
+`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -164,18 +217,14 @@ function downloadTemplate() {
 }
 
 function DepartmentCell({ row }: { row: ParsedRow }) {
-  if (!row.valid && row.departmentInput) {
+  if (row.needsDepartment) {
     return (
-      <Badge variant="destructive" className="max-w-[220px] truncate font-normal" title={row.departmentLabel}>
-        {row.departmentLabel}
-      </Badge>
-    );
-  }
-
-  if (row.departmentId == null) {
-    return (
-      <Badge variant="secondary" className="font-normal">
-        Assign later
+      <Badge
+        variant="outline"
+        className="max-w-[220px] truncate border-yellow-500/30 bg-yellow-500/10 font-normal text-yellow-700 dark:text-yellow-300"
+        title={row.departmentLabel || "Assign later"}
+      >
+        {row.departmentLabel || "Assign later"}
       </Badge>
     );
   }
@@ -188,6 +237,18 @@ function DepartmentCell({ row }: { row: ParsedRow }) {
 }
 
 function StatusCell({ row }: { row: ParsedRow }) {
+  if (row.valid && row.needsDepartment) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-yellow-500/30 bg-yellow-500/10 font-normal text-yellow-700 dark:text-yellow-300"
+      >
+        <AlertCircle className="mr-1 h-3 w-3" />
+        Assign department later
+      </Badge>
+    );
+  }
+
   if (row.valid) {
     return (
       <Badge className="border-green-500/30 bg-green-500/10 font-normal text-green-700 hover:bg-green-500/10 dark:text-green-300">
@@ -206,10 +267,10 @@ function StatusCell({ row }: { row: ParsedRow }) {
 }
 
 export function AdminBulkUsersPage() {
+  const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [previewRows, setPreviewRows] = React.useState<ParsedRow[]>([]);
   const [isParsing, setIsParsing] = React.useState(false);
-  const [isImporting, setIsImporting] = React.useState(false);
 
   const { data: departments = [], isLoading: isDepartmentsLoading } = useQuery({
     queryKey: ["admin", "bulk-users", "departments"],
@@ -218,12 +279,41 @@ export function AdminBulkUsersPage() {
 
   const departmentLookup = React.useMemo(() => buildDepartmentLookup(departments), [departments]);
 
+  const importMutation = useMutation({
+    mutationFn: importBulkUsers,
+    onSuccess: (data) => {
+      const { created, skipped, failed } = data.summary;
+      queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["admin", "bulk-users"] });
+
+      if (created > 0) {
+        const pendingDepartment = data.summary.pendingDepartment ?? 0;
+        toast.success(data.message ?? `Imported ${created} user(s)`, {
+          description:
+            skipped + failed > 0
+              ? `${skipped} skipped, ${failed} failed.`
+              : pendingDepartment > 0
+                ? `${pendingDepartment} need department assignment on Users → Incomplete details.`
+                : "Users can sign in with Microsoft SSO.",
+        });
+        setSelectedFile(null);
+        setPreviewRows([]);
+      } else {
+        toast.error(data.message ?? "No users were imported", {
+          description: `${skipped} skipped, ${failed} failed. Check emails already in the system.`,
+        });
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const rows = previewRows;
   const validCount = rows.filter((row) => row.valid).length;
+  const needsDepartmentCount = rows.filter((row) => row.valid && row.needsDepartment).length;
   const invalidCount = rows.length - validCount;
-  const assignLaterCount = rows.filter((row) => row.valid && row.departmentId == null).length;
   const hasPreview = rows.length > 0;
-  const canImport = hasPreview && invalidCount === 0 && !isImporting && !isParsing && !isDepartmentsLoading;
+  const canImport =
+    hasPreview && invalidCount === 0 && !importMutation.isPending && !isParsing && !isDepartmentsLoading;
 
   const parseFile = async (file: File) => {
     setIsParsing(true);
@@ -264,7 +354,7 @@ export function AdminBulkUsersPage() {
     await parseFile(file);
   };
 
-  const handleImport = async () => {
+  const handleImport = () => {
     if (!rows.length) {
       toast.error("Upload a CSV file before importing.");
       return;
@@ -275,14 +365,22 @@ export function AdminBulkUsersPage() {
       return;
     }
 
-    setIsImporting(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    setIsImporting(false);
+    const users = rows
+      .filter((row) => row.valid)
+      .map((row) => ({
+        empno: row.empno,
+        email: row.email,
+        departmentId: row.departmentId,
+        division: row.division,
+        roleId: row.roleId,
+      }));
 
-    const assignedCount = validCount - assignLaterCount;
-    toast.success("Bulk import preview complete", {
-      description: `${validCount} staff records ready (${assignedCount} with department, ${assignLaterCount} assign later). Role defaults to Staff (ID ${DEFAULT_ROLE_ID}). Backend integration is not connected yet.`,
-    });
+    if (users.length > 500) {
+      toast.error("Maximum 500 users per import.");
+      return;
+    }
+
+    importMutation.mutate(users);
   };
 
   return (
@@ -301,27 +399,12 @@ export function AdminBulkUsersPage() {
                 <h1 className="font-display text-2xl font-bold tracking-tight">Bulk add users</h1>
               </div>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Button variant="outline" className="w-full sm:w-auto" asChild>
-                <Link to="/admin/users">
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to users
-                </Link>
-              </Button>
-              <Button className="w-full sm:w-auto" disabled={!canImport} onClick={handleImport}>
-                {isImporting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Importing…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Import {validCount || 0} users
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button variant="outline" className="w-full sm:w-auto" asChild>
+              <Link to="/admin/users">
+                <ArrowLeft className="h-4 w-4" />
+                Back to users
+              </Link>
+            </Button>
           </div>
         </header>
 
@@ -342,6 +425,19 @@ export function AdminBulkUsersPage() {
               </Card>
               <Card>
                 <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">Assign department later</p>
+                  <p
+                    className={cn(
+                      "mt-1 text-2xl font-bold tabular-nums",
+                      needsDepartmentCount > 0 ? "text-yellow-700 dark:text-yellow-300" : "text-foreground",
+                    )}
+                  >
+                    {needsDepartmentCount}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground">Invalid</p>
                   <p
                     className={cn(
@@ -353,12 +449,6 @@ export function AdminBulkUsersPage() {
                   </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground">Assign dept. later</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums">{assignLaterCount}</p>
-                </CardContent>
-              </Card>
             </div>
           ) : null}
 
@@ -366,8 +456,8 @@ export function AdminBulkUsersPage() {
             <CardHeader>
               <CardTitle>Upload CSV</CardTitle>
               <CardDescription>
-                Upload a file with empno, email, and optional department and division. All imported users default to
-                Staff (role_id {DEFAULT_ROLE_ID}).
+                Upload a file with empno, email, optional department, and optional division. All imported users default
+                to Staff (role_id {DEFAULT_ROLE_ID}). Unknown departments still import for later assignment.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -405,15 +495,33 @@ export function AdminBulkUsersPage() {
                   </label>
 
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={downloadTemplate} disabled={isDepartmentsLoading}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => downloadTemplate(departments)}
+                      disabled={isDepartmentsLoading}
+                    >
                       <Download className="h-4 w-4" />
                       Download template
                     </Button>
                     {selectedFile ? (
-                      <Button type="button" variant="ghost" onClick={() => handleFileChange(null)}>
+                      <Button type="button" variant="outline" onClick={() => handleFileChange(null)}>
                         Clear file
                       </Button>
                     ) : null}
+                    <Button type="button" disabled={!canImport} onClick={handleImport}>
+                      {importMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Importing…
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          Import {validCount || 0} users
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
 
@@ -424,13 +532,14 @@ export function AdminBulkUsersPage() {
                   </div>
                   <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
                     <li>
-                      <span className="font-medium text-foreground">empno</span> — employee number or identifier
+                      <span className="font-medium text-foreground">empno</span> — employee number
                     </li>
                     <li>
                       <span className="font-medium text-foreground">email</span> — Microsoft SSO email
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">department</span> — optional; matched by name
+                      <span className="font-medium text-foreground">department</span> — exact name, or leave blank /
+                      wrong to assign later
                     </li>
                     <li>
                       <span className="font-medium text-foreground">division</span> — optional free text
@@ -443,10 +552,10 @@ export function AdminBulkUsersPage() {
 
           <Alert>
             <UsersIcon className="h-4 w-4" />
-            <AlertTitle>Preview only</AlertTitle>
+            <AlertTitle>Imports to database</AlertTitle>
             <AlertDescription>
-              Import does not write to the database yet. Use this page to validate your CSV before backend integration is
-              connected.
+              Valid rows are inserted into the staff table. Existing emails are skipped. Unknown or missing departments
+              still import and appear under Incomplete details so admins can assign them later.
             </AlertDescription>
           </Alert>
 

@@ -1,9 +1,10 @@
-import { ArrowUpRight, BarChart3, Download, FileText, Loader2, ShieldCheck, TrendingUp, Users } from "lucide-react";
+import { ArrowUpRight, BarChart3, FileText, Loader2, Search, ShieldCheck, TrendingUp, Users } from "lucide-react";
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminSidebar } from "@/admin/Sidebar";
@@ -22,6 +23,7 @@ function departmentRiskBadgeClass(risk: "Low" | "Moderate" | "High") {
 }
 
 export function AdminReportPage() {
+  const [departmentSearch, setDepartmentSearch] = React.useState("");
   const { data: reportStats, isLoading: isReportLoading } = useQuery({
     queryKey: ["requisitions", "admin", "report-stats"],
     queryFn: fetchAdminReportStats,
@@ -46,8 +48,17 @@ export function AdminReportPage() {
     averageHours: 0,
     targetHours: cpdTargetHours,
   };
+  const allDepartments = reportStats?.departments ?? [];
   const topDepartments = reportStats?.topDepartments ?? [];
   const monthlyTrend = reportStats?.monthlyTrend ?? [];
+
+  const departmentSearchLower = departmentSearch.trim().toLowerCase();
+  const isDepartmentSearchActive = departmentSearchLower.length > 0;
+  const visibleDepartments = React.useMemo(() => {
+    if (!isDepartmentSearchActive) return topDepartments;
+    const source = allDepartments.length > 0 ? allDepartments : topDepartments;
+    return source.filter((row) => row.departmentName.toLowerCase().includes(departmentSearchLower));
+  }, [allDepartments, departmentSearchLower, isDepartmentSearchActive, topDepartments]);
 
   const complianceRate = totalStaff ? Math.round((compliantStaff / totalStaff) * 100) : 0;
   const approvalRate = submittedClaims ? Math.round((approvedClaims / submittedClaims) * 100) : 0;
@@ -216,19 +227,41 @@ export function AdminReportPage() {
 
           <div className="mt-6 grid gap-4 xl:grid-cols-5">
             <Card className="xl:col-span-3">
-              <CardHeader>
-                <CardTitle>Department performance</CardTitle>
-                <CardDescription>Top 5 departments by CPD completion rate.</CardDescription>
+              <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1.5">
+                  <CardTitle>Department performance</CardTitle>
+                  <CardDescription>
+                    {isDepartmentSearchActive
+                      ? `Showing ${visibleDepartments.length} matching department${visibleDepartments.length === 1 ? "" : "s"} from all units.`
+                      : "Top 5 departments by CPD completion rate. Search to view any other department."}
+                  </CardDescription>
+                </div>
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={departmentSearch}
+                    onChange={(e) => setDepartmentSearch(e.target.value)}
+                    placeholder="Search department…"
+                    className="pl-9"
+                  />
+                </div>
               </CardHeader>
               <CardContent>
                 {isReportLoading ? (
                   <div className="flex justify-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                ) : topDepartments.length === 0 ? (
+                ) : allDepartments.length === 0 && topDepartments.length === 0 ? (
                   <div className="rounded-lg border border-dashed py-12 text-center">
                     <p className="font-medium text-foreground">No department data yet</p>
                     <p className="mt-1 text-sm text-muted-foreground">Departments will appear once staff log CPD hours.</p>
+                  </div>
+                ) : visibleDepartments.length === 0 ? (
+                  <div className="rounded-lg border border-dashed py-12 text-center">
+                    <p className="font-medium text-foreground">No departments match</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Try another name for &ldquo;{departmentSearch.trim()}&rdquo;.
+                    </p>
                   </div>
                 ) : (
                   <div className="rounded-lg border">
@@ -243,7 +276,7 @@ export function AdminReportPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {topDepartments.map((row) => (
+                        {visibleDepartments.map((row) => (
                           <TableRow key={row.departmentId}>
                             <TableCell className="font-medium">{row.departmentName}</TableCell>
                             <TableCell className="hidden md:table-cell">{row.staffCount}</TableCell>

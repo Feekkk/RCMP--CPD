@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { History, LayoutDashboard, LogOut, Menu, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useLogout } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -13,7 +14,7 @@ const navItems = [
 ] as const;
 
 function SidebarBody({ onNavigate, role }: { onNavigate?: () => void; role: string }) {
-  const navigate = useNavigate();
+  const handleLogout = useLogout();
   return (
     <div className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b px-6 py-5">
@@ -53,7 +54,7 @@ function SidebarBody({ onNavigate, role }: { onNavigate?: () => void; role: stri
             className="w-full justify-start text-muted-foreground hover:text-foreground"
             onClick={() => {
               onNavigate?.();
-              navigate("/login");
+              void handleLogout();
             }}
           >
             <LogOut className="h-4 w-4" />

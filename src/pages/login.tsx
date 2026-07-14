@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
@@ -13,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { AUTH_ME_QUERY_KEY } from "@/hooks/useAuth";
 import { devLogin, fetchDevAccounts, type DevAccount } from "@/lib/authApi";
 
 function MicrosoftLogo({ className }: { className?: string }) {
@@ -28,6 +30,7 @@ function MicrosoftLogo({ className }: { className?: string }) {
 
 const Login = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [error, setError] = React.useState<string | null>(null);
   const [ssoLoading, setSsoLoading] = React.useState(false);
@@ -98,6 +101,7 @@ const Login = () => {
     setDevLoading(true);
     try {
       const { redirect } = await devLogin(devEmail);
+      await queryClient.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY });
       navigate(redirect);
     } catch (err) {
       setDevError(err instanceof Error ? err.message : "Dev sign-in failed.");

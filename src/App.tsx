@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { GuestRoute, ProtectedRoute } from "@/components/ProtectedRoute";
+import { ROLE } from "@/lib/authApi";
 import Index from "./pages/Index.tsx";
 import Login from "./pages/login.tsx";
 import { StaffDashboardPage } from "./staff/dashboard.tsx";
@@ -42,48 +44,51 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          
-          {/* Homepage */}
           <Route path="/" element={<Index />} />
 
-          {/* Staff Routes */}
-          <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
-          <Route path="/staff/requisition" element={<Requisition />} />
-          <Route path="/staff/requisition/track" element={<TrackRequisition />} />
-          <Route path="/staff/post-training/:requisitionId" element={<PostTrainingPage />} />
-          <Route path="/staff/calendar" element={<StaffCalendarPage />} />
-          <Route path="/staff/history" element={<History />} />
-          <Route path="/staff/settings" element={<Settings />} />
+          <Route element={<GuestRoute />}>
+            <Route path="/login" element={<Login />} />
+          </Route>
 
-          {/* Admin Routes */}
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin/requisitions" element={<AdminRequisitionsPage />} />
-          <Route path="/admin/verify-requisition" element={<AdminVerifyRequisitionPage />} />
-          <Route path="/admin/report" element={<AdminReportPage />} />
-          <Route path="/admin/history" element={<AdminHistoryPage />} />
-          <Route path="/admin/requisition/track" element={<AdminTrackRequisitionPage />} />
-          <Route path="/admin/settings" element={<AdminSettingsPage />} />
-          <Route path="/admin/users" element={<AdminUsersPage />} />
-          <Route path="/admin/users/bulk" element={<AdminBulkUsersPage />} />
+          <Route element={<ProtectedRoute roles={[ROLE.STAFF]} />}>
+            <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
+            <Route path="/staff/requisition" element={<Requisition />} />
+            <Route path="/staff/requisition/track" element={<TrackRequisition />} />
+            <Route path="/staff/post-training/:requisitionId" element={<PostTrainingPage />} />
+            <Route path="/staff/calendar" element={<StaffCalendarPage />} />
+            <Route path="/staff/history" element={<History />} />
+            <Route path="/staff/settings" element={<Settings />} />
+          </Route>
 
-          {/* HOD Routes */}
-          <Route path="/hod/dashboard" element={<HODDashboardPage />} />
-          <Route path="/hod/calendar" element={<HODCalendarPage />} />
-          <Route path="/hod/requisitions" element={<HODRequisitionsPage />} />
-          <Route path="/hod/review-queue" element={<HODReviewQueuePage />} />
-          <Route path="/hod/requisition/track" element={<HODTrackRequisitionPage />} />
-          <Route path="/hod/history" element={<HODHistoryPage />} />
-          <Route path="/hod/settings" element={<HODSettingsPage />} />
+          <Route element={<ProtectedRoute roles={[ROLE.ADMIN]} />}>
+            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/requisitions" element={<AdminRequisitionsPage />} />
+            <Route path="/admin/verify-requisition" element={<AdminVerifyRequisitionPage />} />
+            <Route path="/admin/report" element={<AdminReportPage />} />
+            <Route path="/admin/history" element={<AdminHistoryPage />} />
+            <Route path="/admin/requisition/track" element={<AdminTrackRequisitionPage />} />
+            <Route path="/admin/settings" element={<AdminSettingsPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/users/bulk" element={<AdminBulkUsersPage />} />
+          </Route>
 
-          {/* Approval Routes */}
-          <Route path="/approval/dashboard" element={<ApprovalDashboardPage />} />
-          <Route path="/approval/report" element={<ApprovalReportPage />} />
-          <Route path="/approval/approval" element={<ApprovalQueuePage />} />
+          <Route element={<ProtectedRoute roles={[ROLE.HOD]} />}>
+            <Route path="/hod/dashboard" element={<HODDashboardPage />} />
+            <Route path="/hod/calendar" element={<HODCalendarPage />} />
+            <Route path="/hod/requisitions" element={<HODRequisitionsPage />} />
+            <Route path="/hod/review-queue" element={<HODReviewQueuePage />} />
+            <Route path="/hod/requisition/track" element={<HODTrackRequisitionPage />} />
+            <Route path="/hod/history" element={<HODHistoryPage />} />
+            <Route path="/hod/settings" element={<HODSettingsPage />} />
+          </Route>
 
-          {/* Pages */}
-          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute roles={[ROLE.APPROVAL]} />}>
+            <Route path="/approval/dashboard" element={<ApprovalDashboardPage />} />
+            <Route path="/approval/report" element={<ApprovalReportPage />} />
+            <Route path="/approval/approval" element={<ApprovalQueuePage />} />
+          </Route>
+
           <Route path="*" element={<NotFound />} />
-
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

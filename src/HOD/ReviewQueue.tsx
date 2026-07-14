@@ -51,6 +51,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { HODSidebar } from "@/HOD/Sidebar";
 import { fetchCurrentUser } from "@/lib/authApi";
+import { AUTH_ME_QUERY_KEY } from "@/hooks/useAuth";
 import type { HodPostTrainingQueueItem, HodProgrammeSlot, HodQueueStatus, HodReviewQueueItem } from "@/lib/requisitionsApi";
 import {
   fetchHodPostTrainingQueue,
@@ -458,7 +459,7 @@ export function HODReviewQueuePage() {
   const [rejectRemarks, setRejectRemarks] = React.useState("");
 
   const { data: currentUser } = useQuery({
-    queryKey: ["auth", "me"],
+    queryKey: AUTH_ME_QUERY_KEY,
     queryFn: fetchCurrentUser,
   });
 

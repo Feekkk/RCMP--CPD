@@ -19,6 +19,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HODSidebar } from "@/HOD/Sidebar";
 import { fetchCurrentUser } from "@/lib/authApi";
+import { AUTH_ME_QUERY_KEY } from "@/hooks/useAuth";
 import {
   fetchHodDepartmentStaff,
   fetchHodRequisitionHistory,
@@ -198,7 +199,7 @@ function CircularProgress({ percent, size = 128, stroke = 10 }: { percent: numbe
 
 export const HODDashboardPage = () => {
   const { data: currentUser } = useQuery({
-    queryKey: ["auth", "me"],
+    queryKey: AUTH_ME_QUERY_KEY,
     queryFn: fetchCurrentUser,
   });
 

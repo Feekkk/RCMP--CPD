@@ -30,16 +30,41 @@ import { cn } from "@/lib/utils";
 const PHASE_TABS: {
   value: HistoryPhaseFilter;
   label: string;
+  hint?: string;
   summaryKey: keyof import("@/lib/requisitionsApi").RequisitionHistorySummary | "all";
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: "all", label: "All", summaryKey: "all", icon: FileText },
-  { value: "draft", label: "Drafts", summaryKey: "draft", icon: FilePen },
-  { value: "pre_training", label: "Pre-training", summaryKey: "preTraining", icon: Clock },
-  { value: "post_training", label: "Post-training", summaryKey: "postTraining", icon: ClipboardCheck },
-  { value: "completed", label: "Completed", summaryKey: "completed", icon: Award },
-  { value: "rejected", label: "Rejected", summaryKey: "rejected", icon: XCircle },
-];
+    { value: "all", label: "All", summaryKey: "all", icon: FileText },
+    { value: "draft", label: "Drafts", hint: "Saved but not submitted yet", summaryKey: "draft", icon: FilePen },
+    {
+      value: "pre_training",
+      label: "Pre-training",
+      hint: "In approval or waiting for training day",
+      summaryKey: "preTraining",
+      icon: Clock,
+    },
+    {
+      value: "post_training",
+      label: "Post-training",
+      hint: "Training done - evidence & survey needed",
+      summaryKey: "postTraining",
+      icon: ClipboardCheck,
+    },
+    {
+      value: "completed",
+      label: "Completed",
+      hint: "All steps done, CPD points counted",
+      summaryKey: "completed",
+      icon: Award,
+    },
+    {
+      value: "rejected",
+      label: "Rejected",
+      hint: "Not approved - check remarks",
+      summaryKey: "rejected",
+      icon: XCircle,
+    },
+  ];
 
 const LEGEND = [
   { light: "green" as const, label: "Complete / approved" },
@@ -138,6 +163,7 @@ export function RequisitionHistoryPanel({
                   <span className={cn("text-2xl font-bold tracking-tight", active && "text-foreground")}>{count}</span>
                 </div>
                 <p className={cn("mt-2 text-sm font-medium", active ? "text-foreground" : "text-foreground")}>{tab.label}</p>
+                {tab.hint ? <p className="mt-0.5 text-xs text-muted-foreground">{tab.hint}</p> : null}
               </button>
             );
           })}

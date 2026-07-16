@@ -92,18 +92,20 @@ type ApprovalDialogProps = {
   requisitionId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onApprove: (item: ApprovalQueueItem) => void;
-  onReject: (item: ApprovalQueueItem) => void;
-  isSubmitting: boolean;
+  onApprove?: (item: ApprovalQueueItem) => void;
+  onReject?: (item: ApprovalQueueItem) => void;
+  isSubmitting?: boolean;
+  readOnly?: boolean;
 };
 
-function ApprovalDialog({
+export function ApprovalDialog({
   requisitionId,
   open,
   onOpenChange,
   onApprove,
   onReject,
-  isSubmitting,
+  isSubmitting = false,
+  readOnly = false,
 }: ApprovalDialogProps) {
   const { data: item, isLoading, isError, error } = useQuery({
     queryKey: ["requisitions", "approval", "detail", requisitionId],
@@ -132,12 +134,18 @@ function ApprovalDialog({
                     {item.id} · {item.category}
                   </DialogDescription>
                 </div>
-                <Badge
-                  variant="default"
-                  className="bg-emerald-600 hover:bg-emerald-600/90 dark:bg-emerald-700"
-                >
-                  HR verified
-                </Badge>
+                {item.status === "approved" ? (
+                  <Badge variant="default">Approved</Badge>
+                ) : item.status === "rejected" ? (
+                  <Badge variant="destructive">Rejected</Badge>
+                ) : (
+                  <Badge
+                    variant="default"
+                    className="bg-emerald-600 hover:bg-emerald-600/90 dark:bg-emerald-700"
+                  >
+                    HR verified
+                  </Badge>
+                )}
               </div>
             </DialogHeader>
 
@@ -376,24 +384,28 @@ function ApprovalDialog({
               </div>
             </div>
 
-            <Separator />
+            {!readOnly && item.status === "verified" ? (
+              <>
+                <Separator />
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                disabled={isSubmitting}
-                onClick={() => onReject(item)}
-              >
-                <ThumbsDown className="h-4 w-4" />
-                Reject
-              </Button>
-              <Button type="button" disabled={isSubmitting} onClick={() => onApprove(item)}>
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
-                Approve
-              </Button>
-            </DialogFooter>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    disabled={isSubmitting}
+                    onClick={() => onReject?.(item)}
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                    Reject
+                  </Button>
+                  <Button type="button" disabled={isSubmitting} onClick={() => onApprove?.(item)}>
+                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
+                    Approve
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : null}
           </>
         ) : null}
       </DialogContent>

@@ -1,17 +1,33 @@
 import { useState } from "react";
-import { CheckCircle2, Clock, FileText, Loader2, TrendingUp } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Clock, Eye, FileText, Loader2, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
+import { ApprovalDialog } from "@/approval/Approval";
 import { ApprovalSidebar } from "@/approval/Sidebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   fetchApprovalDashboardItems,
   fetchApprovalDashboardStats,
+  submitApproval,
   type ApprovalDashboardView,
+  type ApprovalQueueItem,
 } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatTodayDate } from "@/lib/requisitionStatus";
 import { cn } from "@/lib/utils";
@@ -86,7 +102,11 @@ function statusBadge(status: string) {
 }
 
 export function ApprovalDashboardPage() {
+  const queryClient = useQueryClient();
   const [selectedView, setSelectedView] = useState<ApprovalDashboardView>("pending");
+  const [selectedRequisitionId, setSelectedRequisitionId] = useState<number | null>(null);
+  const [confirmRejectItem, setConfirmRejectItem] = useState<ApprovalQueueItem | null>(null);
+  const [rejectRemarks, setRejectRemarks] = useState("");
   const activeView = VIEW_CONFIG[selectedView];
 
   const { data: dashboardStats, isLoading: isStatsLoading } = useQuery({
@@ -99,6 +119,28 @@ export function ApprovalDashboardPage() {
     queryFn: () => fetchApprovalDashboardItems(selectedView),
   });
 
+  const approvalMutation = useMutation({
+    mutationFn: ({
+      requisitionId,
+      decision,
+      remarks,
+    }: {
+      requisitionId: number;
+      decision: "approve" | "reject";
+      remarks?: string;
+    }) => submitApproval(requisitionId, decision, remarks),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: ["requisitions", "approval"] });
+      setSelectedRequisitionId(null);
+      setConfirmRejectItem(null);
+      setRejectRemarks("");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Unable to submit approval decision.");
+    },
+  });
+
   const statValues: Record<ApprovalDashboardView, number> = {
     pending: dashboardStats?.pendingApproval ?? 0,
     approved: dashboardStats?.approvedThisMonth ?? 0,
@@ -107,6 +149,29 @@ export function ApprovalDashboardPage() {
   };
 
   const items = itemsData?.requisitions ?? [];
+
+  const handleApprove = (item: ApprovalQueueItem) => {
+    approvalMutation.mutate({ requisitionId: item.requisitionId, decision: "approve" });
+  };
+
+  const handleRejectConfirm = () => {
+    if (!confirmRejectItem) return;
+    const remarks = rejectRemarks.trim();
+    if (!remarks) {
+      toast.error("Please provide a reason for rejection.");
+      return;
+    }
+    approvalMutation.mutate({
+      requisitionId: confirmRejectItem.requisitionId,
+      decision: "reject",
+      remarks,
+    });
+  };
+
+  const closeRejectDialog = () => {
+    setConfirmRejectItem(null);
+    setRejectRemarks("");
+  };
 
   return (
     <main className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
@@ -193,7 +258,9 @@ export function ApprovalDashboardPage() {
                         <TableHead>Programme</TableHead>
                         <TableHead className="hidden md:table-cell">Staff</TableHead>
                         <TableHead className="hidden md:table-cell">Submitted</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
+                        <TableHead className="hidden sm:table-cell whitespace-nowrap">Total Cost</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[72px]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -207,11 +274,30 @@ export function ApprovalDashboardPage() {
                               <p className="text-sm text-muted-foreground md:hidden">
                                 Submitted: {formatHistoryDate(row.submittedAt)}
                               </p>
+                              <p className="text-sm text-muted-foreground sm:hidden">
+                                Total: RM {Number(row.totalBudget ?? 0).toFixed(2)}
+                              </p>
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">{row.staffName}</TableCell>
-                          <TableCell className="hidden md:table-cell">{formatHistoryDate(row.submittedAt)}</TableCell>
-                          <TableCell className="text-right">{statusBadge(row.status)}</TableCell>
+                          <TableCell className="hidden md:table-cell whitespace-nowrap">
+                            {formatHistoryDate(row.submittedAt)}
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell whitespace-nowrap tabular-nums">
+                            RM {Number(row.totalBudget ?? 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>{statusBadge(row.status)}</TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`View ${row.id} details`}
+                              onClick={() => setSelectedRequisitionId(row.requisitionId)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -221,6 +307,63 @@ export function ApprovalDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        <ApprovalDialog
+          requisitionId={selectedRequisitionId}
+          open={selectedRequisitionId != null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedRequisitionId(null);
+          }}
+          onApprove={handleApprove}
+          onReject={(item) => setConfirmRejectItem(item)}
+          isSubmitting={approvalMutation.isPending}
+        />
+
+        <AlertDialog
+          open={confirmRejectItem != null}
+          onOpenChange={(open) => {
+            if (!open) closeRejectDialog();
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reject requisition?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {confirmRejectItem
+                  ? `This will permanently reject ${confirmRejectItem.id} (${confirmRejectItem.title}). The staff member cannot edit or resubmit this requisition.`
+                  : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="grid gap-2 py-2">
+              <Label htmlFor="dashboardRejectRemarks">Rejection remarks</Label>
+              <Textarea
+                id="dashboardRejectRemarks"
+                placeholder="Explain why this requisition is being rejected…"
+                value={rejectRemarks}
+                onChange={(e) => setRejectRemarks(e.target.value)}
+                maxLength={500}
+                rows={4}
+                disabled={approvalMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">{rejectRemarks.length}/500 characters</p>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={approvalMutation.isPending} onClick={closeRejectDialog}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={approvalMutation.isPending || !rejectRemarks.trim()}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleRejectConfirm();
+                }}
+              >
+                {approvalMutation.isPending ? "Rejecting…" : "Reject"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <footer className="mt-auto w-full border-t">
           <div className="container mx-auto py-4">

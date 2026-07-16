@@ -69,15 +69,11 @@ export const AdminDashboardPage = () => {
               <h1 className="font-display text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" aria-label="Manage users" asChild>
-                <Link to="/admin/users">
-                  <Users className="h-4 w-4" />
-                </Link>
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" aria-label="Requisitions">
+                  <Button aria-label="Requisitions" className="h-10 w-10 p-0 sm:w-auto sm:px-4">
                     <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">Requisition</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

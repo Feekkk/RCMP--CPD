@@ -16,6 +16,7 @@ export function TrackRequisition() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
               <h1 className="font-display text-2xl font-bold tracking-tight">Track Requisition</h1>
+              <p className="text-sm text-muted-foreground">You may click the count card to view your requisition.</p>
             </div>
           </div>
 

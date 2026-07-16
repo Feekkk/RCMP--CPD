@@ -43,7 +43,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -161,7 +160,7 @@ function HodQueueBadge({ status }: { status: HodQueueStatus }) {
       variant="outline"
       className="border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300"
     >
-      Pending
+      Review needed
     </Badge>
   );
 }
@@ -806,15 +805,14 @@ export function HODReviewQueuePage() {
                       <TableHead className="hidden lg:table-cell">Category</TableHead>
                       <TableHead className="hidden md:table-cell">Staff</TableHead>
                       <TableHead className="hidden md:table-cell">Submitted</TableHead>
-                      <TableHead className="text-right">Status</TableHead>
-                      <TableHead className="hidden sm:table-cell text-right">HOD action</TableHead>
+                      <TableHead className="text-right">HOD action</TableHead>
                       <TableHead className="w-[100px] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
                           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                         </TableCell>
                       </TableRow>
@@ -836,9 +834,6 @@ export function HODReviewQueuePage() {
                           <TableCell className="hidden md:table-cell">{row.staffName}</TableCell>
                           <TableCell className="hidden md:table-cell">{formatHistoryDate(row.submittedAt)}</TableCell>
                           <TableCell className="text-right">
-                            <RequisitionStatusBadge statusGroup={statusGroupFromDb(row.status)} />
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell text-right">
                             <HodQueueBadge status={row.hodStatus} />
                           </TableCell>
                           <TableCell className="text-right">
@@ -855,7 +850,7 @@ export function HODReviewQueuePage() {
                       ))
                     ) : !isLoading && !isError ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
                           {rows.length
                             ? "No requisitions match this status filter."
                             : "No requisitions in the queue."}

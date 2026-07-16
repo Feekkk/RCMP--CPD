@@ -59,6 +59,7 @@
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "input-otp": "^1.4.2",
+    "lottie-react": "^2.4.1",
     "lucide-react": "^0.462.0",
     "multer": "^2.2.0",
     "mysql2": "^3.22.3",

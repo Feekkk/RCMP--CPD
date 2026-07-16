@@ -256,6 +256,57 @@ export function isTrainingPast(programmeDates: string[]): boolean {
   return last < today;
 }
 
+export type NextUserAction = {
+  label: string;
+  light: TrafficLight;
+};
+
+export function nextUserAction(item: {
+  status: string;
+  workflowPhase: WorkflowPhase;
+  programmeDates: string[];
+  postTraining: {
+    attendanceAttached: boolean;
+    eSurveyFilled: boolean;
+    hodEvaluationFilled: boolean;
+    isComplete: boolean;
+  };
+}): NextUserAction {
+  switch (item.status) {
+    case "save_draft":
+      return { label: "Complete & submit draft", light: "yellow" };
+    case "rejected_hod":
+    case "rejected_hr":
+      return { label: "Edit & resubmit", light: "red" };
+    case "rejected":
+      return { label: "Rejected — no further action", light: "red" };
+    case "submitted":
+      return { label: "Awaiting HOD review", light: "yellow" };
+    case "being_process":
+      return { label: "Awaiting HR verification", light: "yellow" };
+    case "verified":
+      return { label: "Awaiting final approval", light: "yellow" };
+    default:
+      break;
+  }
+
+  if (item.workflowPhase === "completed" || item.postTraining.isComplete) {
+    return { label: "Completed — no action needed", light: "green" };
+  }
+
+  if (item.workflowPhase === "post_training" || isTrainingPast(item.programmeDates)) {
+    if (!item.postTraining.attendanceAttached) {
+      return { label: "Upload attendance evidence", light: "yellow" };
+    }
+    if (!item.postTraining.eSurveyFilled) {
+      return { label: "Complete e-survey", light: "yellow" };
+    }
+    return { label: "Awaiting HOD evaluation", light: "yellow" };
+  }
+
+  return { label: "Attend training", light: "green" };
+}
+
 export type PreTrainingStep = {
   key: string;
   label: string;

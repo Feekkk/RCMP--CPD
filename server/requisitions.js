@@ -1362,7 +1362,7 @@ async function queryApprovalDetail(pool, requisitionId) {
     `${APPROVAL_DETAIL_SELECT}
      ${APPROVAL_DETAIL_JOINS}
      WHERE r.id = ?
-       AND rs.details = 'verified'
+       AND rs.details IN ('verified', 'approved', 'rejected')
      LIMIT 1`,
     [requisitionId],
   );
@@ -1381,7 +1381,7 @@ async function fetchApprovalRequisitionDocumentPath(pool, requisitionId, slotInd
      INNER JOIN requisition_status rs ON rs.id = r.status_id
      LEFT JOIN requisition_documents doc ON doc.id_documents = r.id_documents
      WHERE r.id = ?
-       AND rs.details = 'verified'
+       AND rs.details IN ('verified', 'approved', 'rejected')
      LIMIT 1`,
     [requisitionId],
   );
@@ -1982,6 +1982,12 @@ function mapRequisitionDbError(err) {
   const code = err?.code;
   const message = String(err?.message ?? "");
 
+  if (code === "LIMIT_FILE_SIZE") {
+    return { status: 400, error: "Each document must be 10MB or smaller." };
+  }
+  if (code === "LIMIT_FILE_COUNT" || code === "LIMIT_UNEXPECTED_FILE") {
+    return { status: 400, error: "Maximum 3 documents per requisition." };
+  }
   if (code === "ER_BAD_FIELD_ERROR" && message.includes("time_")) {
     return {
       status: 503,
@@ -2679,6 +2685,7 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     (req, res, next) => {
       upload.array("documents", 3)(req, res, (err) => {
         if (err) {
+          console.error("Requisition upload error:", err);
           const mapped = mapRequisitionDbError(err);
           return res.status(mapped.status).json({ error: mapped.error });
         }
@@ -3356,6 +3363,7 @@ function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
     (req, res, next) => {
       upload.array("documents", 3)(req, res, (err) => {
         if (err) {
+          console.error("Requisition upload error:", err);
           const mapped = mapRequisitionDbError(err);
           return res.status(mapped.status).json({ error: mapped.error });
         }
@@ -3508,6 +3516,7 @@ function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
     (req, res, next) => {
       postTrainingUpload.single("attendance")(req, res, (err) => {
         if (err) {
+          console.error("Attendance upload error:", err);
           const mapped = mapRequisitionDbError(err);
           return res.status(mapped.status).json({ error: mapped.error });
         }

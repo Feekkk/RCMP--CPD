@@ -113,15 +113,17 @@ export const StaffDashboardPage = () => {
               <h1 className="h-[38px] font-[Georgia,serif] text-2xl font-bold tracking-tight">My Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" aria-label="Plan CPD" asChild>
+              <Button variant="outline" aria-label="Plan CPD" className="h-10 w-10 p-0 sm:w-auto sm:px-4" asChild>
                 <Link to="/staff/calendar">
                   <CalendarCheck className="h-4 w-4" />
+                  <span className="hidden sm:inline">Calendar</span>
                 </Link>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" aria-label="New Requisition">
+                  <Button aria-label="New Requisition" className="h-10 w-10 p-0 sm:w-auto sm:px-4">
                     <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">Requisition</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

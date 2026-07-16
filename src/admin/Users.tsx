@@ -1,11 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
-  Building2,
   ChevronDown,
   FileSpreadsheet,
   Info,
-  LayoutList,
   Loader2,
   Plus,
   Search,
@@ -47,7 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const USERS_QUERY_KEY = ["admin", "users-by-department"] as const;
@@ -854,25 +852,6 @@ export function AdminUsersPage() {
                       onValueChange={(v) => setActiveTab(v as "browse" | "results")}
                       className="grid gap-4"
                     >
-                      <TabsList className="w-full justify-start sm:w-auto">
-                        <TabsTrigger value="browse" className="gap-2">
-                          <Building2 className="h-4 w-4" />
-                          By department
-                          <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                            {filteredDepartments.length}
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger value="results" className="gap-2" disabled={!isSearchActive}>
-                          <LayoutList className="h-4 w-4" />
-                          Search results
-                          {isSearchActive ? (
-                            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                              {searchResultRows.length}
-                            </Badge>
-                          ) : null}
-                        </TabsTrigger>
-                      </TabsList>
-
                       <TabsContent value="browse" className="mt-0">
                         <div className="lg:hidden">
                           <Select

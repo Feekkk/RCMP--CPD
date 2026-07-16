@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { ArrowUpRight, Mail } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Reveal } from "./Reveal";
 
 const faqs: { question: string; answer: ReactNode }[] = [
@@ -52,28 +59,72 @@ const faqs: { question: string; answer: ReactNode }[] = [
 
 export const Faq = () => {
   return (
-    <section id="faq" className="bg-background py-20 sm:py-28">
-      <div className="container mx-auto">
-        <Reveal className="max-w-lg">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">Help / FAQ</p>
-          <h2 className="mt-3 font-display text-3xl font-bold text-foreground sm:text-4xl">
-            Quick answers
-          </h2>
-        </Reveal>
+    <section id="faq" className="relative overflow-hidden border-y bg-secondary/30 py-20 sm:py-28">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 12% 18%, hsl(var(--primary) / 0.12), transparent 42%), radial-gradient(circle at 88% 72%, hsl(var(--secondary) / 0.55), transparent 48%)",
+        }}
+      />
 
-        <div className="mt-12 flex flex-col gap-5 sm:mt-14 lg:flex-row lg:flex-wrap">
-          {faqs.map((faq, i) => (
-            <Reveal
-              key={faq.question}
-              delay={i * 80}
-              className={`w-full lg:w-[calc(50%-0.625rem)] ${i % 2 === 1 ? "lg:mt-8" : ""}`}
+      <div className="container relative mx-auto">
+        <div className="grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 xl:gap-24">
+          <Reveal className="lg:sticky lg:top-28 lg:self-start">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">
+              Help / FAQ
+            </p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Everything you need to know about CPD
+            </h2>
+            <p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+              Short answers on hours, pathways, access, and support — so you can focus on your
+              professional development.
+            </p>
+
+            <a
+              href="mailto:hcd@unikl.edu.my"
+              className="group mt-8 inline-flex items-center gap-3 border-t border-primary/20 pt-6 text-sm transition-colors hover:text-primary"
             >
-              <div className="h-full rounded-2xl border bg-card p-5 shadow-card sm:p-6">
-                <h3 className="font-display text-base font-bold text-foreground">{faq.question}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{faq.answer}</p>
-              </div>
-            </Reveal>
-          ))}
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform duration-300 group-hover:scale-105">
+                <Mail className="h-4 w-4" />
+              </span>
+              <span className="text-left">
+                <span className="block font-medium text-foreground">Still need help?</span>
+                <span className="inline-flex items-center gap-1 text-muted-foreground group-hover:text-primary">
+                  hcd@unikl.edu.my
+                  <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                </span>
+              </span>
+            </a>
+          </Reveal>
+
+          <Reveal delay={120}>
+            <Accordion type="single" collapsible defaultValue="item-0" className="w-full">
+              {faqs.map((faq, i) => (
+                <AccordionItem
+                  key={faq.question}
+                  value={`item-${i}`}
+                  className="border-primary/15 data-[state=open]:border-primary/30"
+                >
+                  <AccordionTrigger className="gap-4 py-5 text-left hover:no-underline [&[data-state=open]]:text-primary">
+                    <span className="flex min-w-0 items-start gap-4">
+                      <span className="mt-0.5 font-display text-sm font-bold tabular-nums text-primary/50">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span className="font-display text-base font-semibold leading-snug text-foreground sm:text-lg">
+                        {faq.question}
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-5 pl-10 text-sm leading-relaxed text-muted-foreground sm:pl-12 sm:text-[0.95rem]">
+                    {faq.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Reveal>
         </div>
       </div>
     </section>

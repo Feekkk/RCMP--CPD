@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminSidebar } from "@/admin/Sidebar";
+import { buildExecutiveSnapshot } from "@/lib/reportSnapshot";
 import { fetchAdminReportStats } from "@/lib/requisitionsApi";
 
 const reportMonth = new Date().toLocaleDateString("en-MY", { month: "long", year: "numeric" });
@@ -69,6 +70,16 @@ export function AdminReportPage() {
     monthlyTrend[0] ?? { month: "", hours: 0 },
   );
 
+  const snapshot = buildExecutiveSnapshot({
+    totalStaff,
+    compliantStaff,
+    complianceRate,
+    approvalRate,
+    submittedClaims,
+    totalHours,
+    departments: allDepartments.length ? allDepartments : topDepartments,
+  });
+
   const summaryCards = [
     {
       label: "CPD compliant staff",
@@ -125,12 +136,17 @@ export function AdminReportPage() {
                 <Badge variant="secondary" className="w-fit">
                   Monthly executive snapshot
                 </Badge>
-                <div>
-                  <h2 className="font-display text-3xl font-bold tracking-tight">CPD performance is progressing well, with a few units needing intervention.</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Most departments are on track, approval flow is stable, and budget usage remains controlled. The main priority is lifting completion in lower-performing units before the next review cycle.
-                  </p>
-                </div>
+                {isReportLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Preparing snapshot…
+                  </div>
+                ) : (
+                  <div>
+                    <h2 className="font-display text-3xl font-bold tracking-tight">{snapshot.headline}</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">{snapshot.detail}</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

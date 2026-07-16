@@ -1,4 +1,5 @@
 import * as React from "react";
+import Lottie from "lottie-react";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +49,27 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isLoadingDraft, setIsLoadingDraft] = React.useState(false);
   const [loadedStatus, setLoadedStatus] = React.useState<string | null>(null);
+  const [showSubmitted, setShowSubmitted] = React.useState(false);
+  const [receiptAnimation, setReceiptAnimation] = React.useState<object | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/receipt.json")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setReceiptAnimation(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!showSubmitted) return;
+    const timer = window.setTimeout(() => setShowSubmitted(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [showSubmitted]);
 
   const applyFormData = React.useCallback((data: RequisitionFormData & { existingDocuments?: string[]; status?: string }) => {
     setCategory(data.category);
@@ -160,6 +182,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
       }
       if (submitAs === "submit") {
         resetForm();
+        setShowSubmitted(true);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to save requisition.");
@@ -182,6 +205,16 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
   const isRejectedHod = loadedStatus === "rejected_hod";
   const isRejectedHr = loadedStatus === "rejected_hr";
   const isRejected = isRejectedHod || isRejectedHr;
+
+  if (showSubmitted) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-background">
+        {receiptAnimation ? <Lottie animationData={receiptAnimation} loop className="h-64 w-64" /> : null}
+        <p className="text-xl font-semibold tracking-tight">Requisition submitted</p>
+        <p className="text-sm text-muted-foreground">Your requisition has been sent for review.</p>
+      </div>
+    );
+  }
 
   return (
     <Card className="mt-6">

@@ -18,8 +18,8 @@ import {
   formatProgrammeSlotDateLong,
   formatProgrammeSlotTimeDetail,
   isTrainingPast,
+  nextUserAction,
   preTrainingSteps,
-  statusDetailLabel,
   TRAFFIC_LIGHT_STYLES,
   workflowPhaseTrafficLight,
 } from "@/lib/requisitionStatus";
@@ -58,6 +58,7 @@ export function RequisitionHistoryCard({
   const programmeSlots = item.programmeSlots?.length
     ? item.programmeSlots
     : item.programmeDates.map((date) => ({ date, from: "", to: "" }));
+  const action = nextUserAction(item);
 
   const resubmitMutation = useMutation({
     mutationFn: () => resubmitRequisition(item.requisitionId),
@@ -100,7 +101,8 @@ export function RequisitionHistoryCard({
                 <div className="flex items-center gap-2 sm:justify-end">
                   <RequisitionStatusBadge
                     statusGroup={item.statusGroup}
-                    label={statusDetailLabel(item.status)}
+                    label={action.label}
+                    light={action.light}
                   />
                 </div>
                 <div className="text-sm text-muted-foreground sm:text-right">

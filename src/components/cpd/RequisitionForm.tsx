@@ -277,22 +277,15 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
 
             <section className="grid gap-4">
               <div className="space-y-1">
-                <h2 className="text-sm font-semibold tracking-tight">2. Justification</h2>
-                <p className="text-sm text-muted-foreground">Briefly explain the reason for this requisition.</p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="justification">
-                  Justification
+                <h2 className="text-sm font-semibold tracking-tight">
+                  2. Programme schedule
                   <RequiredMark />
-                </Label>
-                <Textarea
-                  id="justification"
-                  placeholder="Write your justification..."
-                  value={justification}
-                  onChange={(e) => setJustification(e.target.value)}
-                  className="min-h-28"
-                />
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Add each programme day with date and time. Multi-day programmes can include more than one entry.
+                </p>
               </div>
+              <ProgrammeScheduleFields slots={programmeSlots} onChange={setProgrammeSlots} />
             </section>
 
             <Separator />
@@ -300,7 +293,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
             <section className="grid gap-4">
               <div className="space-y-1">
                 <h2 className="text-sm font-semibold tracking-tight">3. Programme details</h2>
-                <p className="text-sm text-muted-foreground">Provide programme schedule and basic details.</p>
+                <p className="text-sm text-muted-foreground">Provide programme title, venue, and funding details.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2 md:col-span-2">
@@ -314,9 +307,6 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
                     value={programmeTitle}
                     onChange={(e) => setProgrammeTitle(e.target.value)}
                   />
-                </div>
-                <div className="md:col-span-2">
-                  <ProgrammeScheduleFields slots={programmeSlots} onChange={setProgrammeSlots} />
                 </div>
                 <div className="grid gap-2 md:col-span-2">
                   <Label htmlFor="programmeVenue">
@@ -343,7 +333,29 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
 
             <section className="grid gap-4">
               <div className="space-y-1">
-                <h2 className="text-sm font-semibold tracking-tight">4. Organiser detail</h2>
+                <h2 className="text-sm font-semibold tracking-tight">4. Justification</h2>
+                <p className="text-sm text-muted-foreground">Briefly explain the reason for this requisition.</p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="justification">
+                  Justification
+                  <RequiredMark />
+                </Label>
+                <Textarea
+                  id="justification"
+                  placeholder="Write your justification..."
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  className="min-h-28"
+                />
+              </div>
+            </section>
+
+            <Separator />
+
+            <section className="grid gap-4">
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold tracking-tight">5. Organiser detail</h2>
                 <p className="text-sm text-muted-foreground">Who is organizing this programme?</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -402,7 +414,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
 
             <section className="grid gap-4">
               <div className="space-y-1">
-                <h2 className="text-sm font-semibold tracking-tight">5. Budget Allocation</h2>
+                <h2 className="text-sm font-semibold tracking-tight">6. Budget Allocation</h2>
                 <p className="text-sm text-muted-foreground">Leave blank if not applicable.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -439,7 +451,7 @@ export function RequisitionForm({ editId = null, onEditIdChange }: RequisitionFo
 
             <section className="grid gap-4">
               <div className="space-y-1">
-                <h2 className="text-sm font-semibold tracking-tight">6. Upload Documents</h2>
+                <h2 className="text-sm font-semibold tracking-tight">7. Upload Documents</h2>
                 <p className="text-sm text-muted-foreground">Upload supporting and evidence related documents.</p>
               </div>
               <div className="grid gap-2">

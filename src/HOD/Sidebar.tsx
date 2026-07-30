@@ -1,21 +1,36 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink } from "react-router-dom";
 import { Archive, ClipboardCheck, Gauge, LogOut, Menu, SlidersHorizontal } from "lucide-react";
 
+import { SidebarPendingCount } from "@/components/cpd/SidebarPendingCount";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useLogout } from "@/hooks/useAuth";
+import { fetchHodPostTrainingQueue, fetchHodReviewQueue } from "@/lib/requisitionsApi";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
   { to: "/hod/dashboard", label: "Dashboard", icon: Gauge },
-  { to: "/hod/review-queue", label: "Review Queue", icon: ClipboardCheck },
+  { to: "/hod/review-queue", label: "Review Queue", icon: ClipboardCheck, badgeKey: "reviewQueue" },
   { to: "/hod/history", label: "History", icon: Archive },
   { to: "/hod/settings", label: "Settings", icon: SlidersHorizontal },
 ] as const;
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const handleLogout = useLogout();
+  const { data: reviewQueue } = useQuery({
+    queryKey: ["requisitions", "hod", "review-queue"],
+    queryFn: fetchHodReviewQueue,
+  });
+  const { data: postTrainingQueue } = useQuery({
+    queryKey: ["requisitions", "hod", "post-training", "queue"],
+    queryFn: fetchHodPostTrainingQueue,
+  });
+  const pendingByKey = {
+    reviewQueue: (reviewQueue?.summary.pending ?? 0) + (postTrainingQueue?.summary.due ?? 0),
+  } as const;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b px-6 py-5">
@@ -42,7 +57,8 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
                 }
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                {item.label}
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                {"badgeKey" in item ? <SidebarPendingCount count={pendingByKey[item.badgeKey]} /> : null}
               </NavLink>
             ))}
           </div>

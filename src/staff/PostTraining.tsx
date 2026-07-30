@@ -152,12 +152,12 @@ export function PostTrainingPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <StaffSidebar />
-      <div className="md:pl-72">
-        <div className="container mx-auto max-w-2xl py-8">
+      <div className="min-w-0 pt-14 md:pl-72 md:pt-0">
+        <div className="container mx-auto py-8">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Staff</p>
-              <h1 className="font-display text-2xl font-bold tracking-tight">Post-Training</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Post-Training</h1>
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/staff/requisition/track">
@@ -184,15 +184,19 @@ export function PostTrainingPage() {
             </Alert>
           ) : data ? (
             <Card>
-              <CardHeader className="space-y-4">
+              <CardHeader className="space-y-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
                 <div className="space-y-1">
-                  <CardTitle className="text-lg leading-snug">{data.title || "Untitled programme"}</CardTitle>
+                  <CardTitle className="text-lg leading-snug sm:text-xl">{data.title || "Untitled programme"}</CardTitle>
                   <CardDescription>
                     {data.id}
                     {data.category ? ` · ${data.category}` : ""}
                   </CardDescription>
                 </div>
-                {!locked ? <StepIndicator current={currentStep} /> : null}
+                {!locked ? (
+                  <div className="w-full sm:max-w-md sm:shrink-0">
+                    <StepIndicator current={currentStep} />
+                  </div>
+                ) : null}
               </CardHeader>
 
               <CardContent className="grid gap-6">
@@ -202,7 +206,7 @@ export function PostTrainingPage() {
                     <AlertDescription>Post-training unlocks on or after your programme date.</AlertDescription>
                   </Alert>
                 ) : currentStep === "attendance" ? (
-                  <div className="grid gap-4">
+                  <div className="mx-auto grid w-full max-w-3xl gap-4">
                     <div className="space-y-1">
                       <p className="text-sm font-medium">Upload attendance evidence</p>
                       <p className="text-sm text-muted-foreground">
@@ -211,7 +215,7 @@ export function PostTrainingPage() {
                     </div>
                     <label
                       htmlFor="attendanceFile"
-                      className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-10 text-center transition-colors hover:bg-muted/40"
+                      className="flex min-h-48 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-10 text-center transition-colors hover:bg-muted/40 sm:min-h-56 sm:py-14"
                     >
                       <Upload className="h-8 w-8 text-muted-foreground" />
                       <span className="text-sm font-medium">
@@ -230,7 +234,7 @@ export function PostTrainingPage() {
                       type="button"
                       disabled={!attendanceFile || attendanceMutation.isPending}
                       onClick={() => attendanceMutation.mutate()}
-                      className="w-full"
+                      className="w-full sm:ml-auto sm:w-auto sm:min-w-40"
                     >
                       {attendanceMutation.isPending ? (
                         <>
@@ -293,62 +297,64 @@ export function PostTrainingPage() {
                         <p className="text-sm text-muted-foreground">Share your feedback about the programme.</p>
                       </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="objectivesMet">Did the programme meet its objectives?</Label>
-                        <Select
-                          value={survey.objectivesMet}
-                          onValueChange={(value) =>
-                            setSurvey((prev) => ({ ...prev, objectivesMet: value as ESurveySubmission["objectivesMet"] }))
-                          }
-                        >
-                          <SelectTrigger id="objectivesMet">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="partially">Partially</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid gap-2">
+                          <Label htmlFor="objectivesMet">Did the programme meet its objectives?</Label>
+                          <Select
+                            value={survey.objectivesMet}
+                            onValueChange={(value) =>
+                              setSurvey((prev) => ({ ...prev, objectivesMet: value as ESurveySubmission["objectivesMet"] }))
+                            }
+                          >
+                            <SelectTrigger id="objectivesMet">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="yes">Yes</SelectItem>
+                              <SelectItem value="partially">Partially</SelectItem>
+                              <SelectItem value="no">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="satisfaction">Overall satisfaction</Label>
-                        <Select
-                          value={survey.satisfaction}
-                          onValueChange={(value) =>
-                            setSurvey((prev) => ({ ...prev, satisfaction: value as ESurveySubmission["satisfaction"] }))
-                          }
-                        >
-                          <SelectTrigger id="satisfaction">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5">5 — Excellent</SelectItem>
-                            <SelectItem value="4">4 — Good</SelectItem>
-                            <SelectItem value="3">3 — Average</SelectItem>
-                            <SelectItem value="2">2 — Below average</SelectItem>
-                            <SelectItem value="1">1 — Poor</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="satisfaction">Overall satisfaction</Label>
+                          <Select
+                            value={survey.satisfaction}
+                            onValueChange={(value) =>
+                              setSurvey((prev) => ({ ...prev, satisfaction: value as ESurveySubmission["satisfaction"] }))
+                            }
+                          >
+                            <SelectTrigger id="satisfaction">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="5">5 — Excellent</SelectItem>
+                              <SelectItem value="4">4 — Good</SelectItem>
+                              <SelectItem value="3">3 — Average</SelectItem>
+                              <SelectItem value="2">2 — Below average</SelectItem>
+                              <SelectItem value="1">1 — Poor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="wouldRecommend">Would you recommend this programme?</Label>
-                        <Select
-                          value={survey.wouldRecommend}
-                          onValueChange={(value) =>
-                            setSurvey((prev) => ({ ...prev, wouldRecommend: value as ESurveySubmission["wouldRecommend"] }))
-                          }
-                        >
-                          <SelectTrigger id="wouldRecommend">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="grid gap-2 sm:col-span-2 lg:col-span-1">
+                          <Label htmlFor="wouldRecommend">Would you recommend this programme?</Label>
+                          <Select
+                            value={survey.wouldRecommend}
+                            onValueChange={(value) =>
+                              setSurvey((prev) => ({ ...prev, wouldRecommend: value as ESurveySubmission["wouldRecommend"] }))
+                            }
+                          >
+                            <SelectTrigger id="wouldRecommend">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="yes">Yes</SelectItem>
+                              <SelectItem value="no">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
                       <div className="grid gap-2">
@@ -357,12 +363,12 @@ export function PostTrainingPage() {
                           id="comments"
                           value={survey.comments ?? ""}
                           onChange={(e) => setSurvey((prev) => ({ ...prev, comments: e.target.value }))}
-                          className="min-h-24"
+                          className="min-h-24 sm:min-h-32"
                           placeholder="Share any other feedback…"
                         />
                       </div>
 
-                      <Button type="submit" disabled={surveyMutation.isPending} className="w-full">
+                      <Button type="submit" disabled={surveyMutation.isPending} className="w-full sm:ml-auto sm:w-auto sm:min-w-40">
                         {surveyMutation.isPending ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -375,7 +381,7 @@ export function PostTrainingPage() {
                     </form>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-4 py-6 text-center">
+                  <div className="flex flex-col items-center gap-4 py-10 text-center sm:py-14">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
                       <CheckCircle2 className="h-6 w-6" />
                     </div>

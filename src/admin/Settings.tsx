@@ -1,25 +1,22 @@
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Settings as SettingsIcon } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Settings as SettingsIcon } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { EntraProfileDetails } from "@/components/cpd/EntraProfileDetails";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import { AdminSidebar } from "@/admin/Sidebar";
-
-type EntraProfile = {
-  oid: string | null;
-  name: string | null;
-  email: string | null;
-  jobTitle: string | null;
-  officeLocation: string | null;
-};
 
 type EntraProfileResponse = {
   source: string;
   fetchedAt: string;
-  profile: EntraProfile;
+  profile: {
+    oid: string | null;
+    name: string | null;
+    email: string | null;
+    jobTitle: string | null;
+    officeLocation: string | null;
+  };
   graphPath: string;
 };
 
@@ -41,25 +38,24 @@ async function fetchEntraProfile(): Promise<EntraProfileResponse> {
   return data;
 }
 
-function displayValue(value: string | null) {
-  return value?.trim() ? value : "—";
-}
-
-function initialsFromName(name: string | null) {
-  if (!name?.trim()) return "AD";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
-}
-
 export function AdminSettingsPage() {
+  const { toast } = useToast();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["auth", "entra", "profile"],
     queryFn: fetchEntraProfile,
     retry: false,
   });
 
-  const profile = data?.profile;
+  React.useEffect(() => {
+    if (!isError) return;
+    toast({
+      variant: "destructive",
+      title: "Unable to load profile",
+      description: error instanceof Error ? error.message : "Sign in with Microsoft SSO first.",
+    });
+  }, [isError, error, toast]);
+
+  const pending = isLoading || isError || !data;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -91,84 +87,12 @@ export function AdminSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Fetching from Microsoft Graph…</span>
-                </div>
-              ) : isError ? (
-                <div className="grid gap-4 py-8 text-center">
-                  <p className="text-sm font-medium text-destructive">
-                    {error instanceof Error ? error.message : "Unable to load profile."}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Sign in with Microsoft SSO, then return here. If you recently updated the server, sign in again so
-                    Entra tokens are stored in your session.
-                  </p>
-                  <Button asChild className="mx-auto w-fit">
-                    <Link to="/login">Go to login</Link>
-                  </Button>
-                </div>
-              ) : profile ? (
-                <div className="grid gap-6">
-                  <div className="flex items-center gap-4 rounded-xl border bg-muted/20 p-4">
-                    <Avatar className="h-14 w-14 border border-border">
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {initialsFromName(profile.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="font-display text-lg font-semibold tracking-tight">
-                        {displayValue(profile.name)}
-                      </p>
-                      <p className="truncate text-sm text-muted-foreground">{displayValue(profile.email)}</p>
-                      {data.fetchedAt ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Last updated {new Date(data.fetchedAt).toLocaleString()}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Entra ID</TableHead>
-                          <TableHead>Full Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead className="hidden md:table-cell">Job Title</TableHead>
-                          <TableHead className="hidden lg:table-cell">Office Location</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow>
-                          <TableCell className="max-w-[12rem] break-all font-mono text-xs sm:max-w-none sm:text-sm">
-                            {displayValue(profile.oid)}
-                          </TableCell>
-                          <TableCell className="font-medium">{displayValue(profile.name)}</TableCell>
-                          <TableCell className="break-all">{displayValue(profile.email)}</TableCell>
-                          <TableCell className="hidden md:table-cell">{displayValue(profile.jobTitle)}</TableCell>
-                          <TableCell className="hidden lg:table-cell">{displayValue(profile.officeLocation)}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div className="grid gap-3 md:hidden">
-                    <div className="rounded-lg border p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Job title</p>
-                      <p className="mt-1 text-sm">{displayValue(profile.jobTitle)}</p>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                        Office location
-                      </p>
-                      <p className="mt-1 text-sm">{displayValue(profile.officeLocation)}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+              <EntraProfileDetails
+                profile={data?.profile}
+                fetchedAt={data?.fetchedAt}
+                pending={pending}
+                fallbackInitials="AD"
+              />
             </CardContent>
           </Card>
         </div>

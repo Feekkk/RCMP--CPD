@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Building2,
+  CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
-  Info,
   Loader2,
   Plus,
   Search,
@@ -16,7 +17,9 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AdminSidebar } from "@/admin/Sidebar";
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -199,12 +201,12 @@ function DepartmentSelect({
       onValueChange={(v) => onChange(Number(v))}
       disabled={disabled}
     >
-      <SelectTrigger className={cn("h-8 text-xs", className)}>
+      <SelectTrigger className={cn("h-9", className)}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="max-h-[min(50vh,280px)]">
         {options.map((d) => (
-          <SelectItem key={d.departmentId} value={String(d.departmentId)} className="text-xs">
+          <SelectItem key={d.departmentId} value={String(d.departmentId)}>
             <span className="line-clamp-2">{d.departmentName}</span>
           </SelectItem>
         ))}
@@ -228,12 +230,12 @@ function RoleSelect({
 }) {
   return (
     <Select value={String(value)} onValueChange={(v) => onChange(Number(v))} disabled={disabled}>
-      <SelectTrigger className={cn("h-8 text-xs", className)}>
+      <SelectTrigger className={cn("h-9", className)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {roles.map((r) => (
-          <SelectItem key={r.roleId} value={String(r.roleId)} className="text-xs">
+          <SelectItem key={r.roleId} value={String(r.roleId)}>
             {r.roleName}
           </SelectItem>
         ))}
@@ -242,13 +244,21 @@ function RoleSelect({
   );
 }
 
-function StaffTable({
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
+
+function StaffMemberList({
   rows,
   showDepartment,
   departmentOptions,
   roles,
   onUpdateStaff,
   updatingStaffId,
+  emptyMessage = "No staff in this department yet.",
 }: {
   rows: FlatStaffRow[] | StaffMember[];
   showDepartment?: boolean;
@@ -256,72 +266,90 @@ function StaffTable({
   roles: RoleOption[];
   onUpdateStaff: (staffId: number, patch: { roleId?: number; departmentId?: number }) => void;
   updatingStaffId: number | null;
+  emptyMessage?: string;
 }) {
   if (rows.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No staff to display.</p>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <UsersIcon className="h-5 w-5" />
+        </div>
+        <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
+        <p className="max-w-sm text-xs text-muted-foreground">
+          Use Add user above to register someone, or search another department.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[90px]">Staff ID</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead className="hidden md:table-cell">Email</TableHead>
-          <TableHead className="min-w-[140px]">Department</TableHead>
-          <TableHead className="min-w-[130px] text-right">Role</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((member) => {
-          const isUpdating = updatingStaffId === member.staffId;
-          const deptId = member.departmentId;
-          const deptName =
-            showDepartment && "departmentName" in member
-              ? (member as FlatStaffRow).departmentName
-              : departmentOptions.find((d) => d.departmentId === deptId)?.departmentName;
+    <div className="grid gap-3 p-3 sm:p-4">
+      {rows.map((member) => {
+        const isUpdating = updatingStaffId === member.staffId;
+        const deptId = member.departmentId;
+        const needsDepartment = member.isIncomplete || deptId == null;
 
-          return (
-            <TableRow key={showDepartment ? `${deptId}-${member.staffId}` : member.staffId}>
-              <TableCell className="font-medium">{member.staffId}</TableCell>
-              <TableCell>
-                {member.fullName}
-                <p className="text-sm text-muted-foreground md:hidden">{member.email}</p>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">{member.email}</TableCell>
-              <TableCell>
+        return (
+          <div
+            key={showDepartment ? `${deptId ?? "x"}-${member.staffId}` : member.staffId}
+            className={cn(
+              "rounded-2xl border bg-card p-4 transition-colors",
+              needsDepartment && "border-yellow-500/40 bg-yellow-500/5",
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <Avatar className="h-11 w-11 border border-border">
+                <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
+                  {initialsFromName(member.fullName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate font-medium leading-tight">{member.fullName}</p>
+                  {needsDepartment ? (
+                    <Badge
+                      variant="outline"
+                      className="border-yellow-500/30 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                    >
+                      Needs department
+                    </Badge>
+                  ) : null}
+                  {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+                </div>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">{member.email}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Staff ID {member.staffId}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Department</Label>
                 <DepartmentSelect
                   value={deptId}
                   options={departmentOptions}
                   disabled={isUpdating}
-                  placeholder={member.isIncomplete || deptId == null ? "Assign department" : undefined}
+                  placeholder={needsDepartment ? "Assign department…" : undefined}
                   onChange={(id) => {
                     if (id !== deptId) onUpdateStaff(member.staffId, { departmentId: id });
                   }}
                 />
-                {showDepartment && deptName ? (
-                  <p className="mt-1 text-xs text-muted-foreground lg:hidden">{deptName}</p>
-                ) : null}
-              </TableCell>
-              <TableCell className="text-right">
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Role</Label>
                 <RoleSelect
                   value={member.roleId}
                   roles={roles}
                   disabled={isUpdating}
-                  className="ml-auto w-full max-w-[160px]"
                   onChange={(id) => {
                     if (id !== member.roleId) onUpdateStaff(member.staffId, { roleId: id });
                   }}
                 />
-                {isUpdating ? (
-                  <Loader2 className="ml-auto mt-1 h-3 w-3 animate-spin text-muted-foreground" />
-                ) : null}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -339,28 +367,38 @@ function DepartmentListButton({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+        "flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
         isSelected
-          ? "border-primary/40 bg-accent text-foreground"
-          : "border-transparent hover:border-border hover:bg-accent/60",
+          ? "border-primary/40 bg-primary/5 text-foreground shadow-sm"
+          : "border-transparent hover:border-border hover:bg-muted/50",
       )}
     >
-      <span className="line-clamp-2 font-medium leading-snug">{dept.departmentName}</span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="h-5 px-1.5 text-xs font-normal">
-          {dept.staffCount}
-        </Badge>
-        {dept.hasHod ? (
-          <span className="truncate text-xs text-muted-foreground">HOD: {dept.hods[0].fullName}</span>
-        ) : (
-          <Badge
-            variant="outline"
-            className="h-5 border-yellow-500/30 bg-yellow-500/15 px-1.5 text-xs font-normal text-yellow-700 dark:text-yellow-300"
-          >
-            No HOD
-          </Badge>
+      <span
+        className={cn(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          dept.hasHod ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300",
         )}
-      </div>
+      >
+        {dept.hasHod ? <CheckCircle2 className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 text-sm font-medium leading-snug">{dept.departmentName}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-1.5">
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
+            {dept.staffCount} staff
+          </Badge>
+          {dept.hasHod ? (
+            <span className="truncate text-xs text-muted-foreground">HOD: {dept.hods[0].fullName}</span>
+          ) : (
+            <Badge
+              variant="outline"
+              className="h-5 border-yellow-500/30 bg-yellow-500/15 px-1.5 text-[10px] font-normal text-yellow-700 dark:text-yellow-300"
+            >
+              No HOD
+            </Badge>
+          )}
+        </span>
+      </span>
     </button>
   );
 }
@@ -633,7 +671,6 @@ export function AdminUsersPage() {
     }
   }, [isSearchActive, searchResultRows.length]);
 
-  const missingHod = data?.departmentsWithoutHod ?? [];
   const incompleteStaff = data?.incompleteStaff ?? [];
   const incompleteCount = data?.summary.incompleteStaffCount ?? incompleteStaff.length;
 
@@ -735,221 +772,224 @@ export function AdminUsersPage() {
               />
 
               <div className="grid gap-4 sm:grid-cols-3">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total staff</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="font-display text-2xl font-bold tracking-tight">{data.summary.totalStaff}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">All staff accounts in the system</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Departments</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="font-display text-2xl font-bold tracking-tight">{data.summary.totalDepartments}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Active departments with staff records</p>
-                  </CardContent>
-                </Card>
-                <Card
-                  role="button"
-                  tabIndex={0}
+                <InsightStatCard
+                  title="Total staff"
+                  value={data.summary.totalStaff}
+                  description="All staff accounts in the system"
+                  icon={UsersIcon}
+                  featured
+                />
+                <InsightStatCard
+                  title="Departments"
+                  value={data.summary.totalDepartments}
+                  description="Active departments with staff records"
+                  icon={Building2}
+                />
+                <InsightStatCard
+                  title="Incomplete details"
+                  value={incompleteCount}
+                  description="Click to assign departments for incomplete staff"
+                  icon={UserX}
                   className={cn(
-                    "cursor-pointer transition-colors hover:border-yellow-500/40",
-                    showIncomplete && "border-yellow-500/50 bg-yellow-500/5",
+                    "cursor-pointer",
+                    showIncomplete && "border-yellow-500/50 bg-yellow-500/5 ring-2 ring-yellow-500/20",
+                    incompleteCount > 0 && !showIncomplete && "border-yellow-500/30",
                   )}
+                  valueClassName={incompleteCount > 0 ? "text-yellow-700 dark:text-yellow-300" : undefined}
+                  iconClassName={
+                    incompleteCount > 0
+                      ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                      : undefined
+                  }
                   onClick={openIncompleteStaff}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      openIncompleteStaff();
-                    }
-                  }}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Incomplete details</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p
-                      className={cn(
-                        "font-display text-2xl font-bold tracking-tight",
-                        incompleteCount > 0 && "text-yellow-700 dark:text-yellow-300",
-                      )}
-                    >
-                      {incompleteCount}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Click to assign departments for incomplete staff
-                    </p>
-                  </CardContent>
-                </Card>
+                />
               </div>
 
               <Card className="mt-6">
                 <CardHeader>
                   <CardTitle>Staff directory</CardTitle>
                   <CardDescription>
-                    Change role or department from the dropdowns in each row — updates save automatically.
+                    Pick a department on the left, then update each person&apos;s role or department below. Changes save
+                    automatically.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4">
                   {showIncomplete ? (
                     <div className="grid gap-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-3 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="font-medium">Staff missing department</p>
-                          <p className="text-sm text-muted-foreground">
-                            Assign a department for each row. They leave this list once updated.
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Assign a department for each person. They leave this list once updated.
                           </p>
                         </div>
                         <Button type="button" variant="outline" onClick={() => setShowIncomplete(false)}>
                           Back to directory
                         </Button>
                       </div>
-                      <div className="rounded-lg border">
-                        <ScrollArea className="h-[min(58vh,520px)]">
-                          <div className="p-2">
-                            <StaffTable rows={incompleteRows} showDepartment {...tableEditProps} />
-                          </div>
+                      <div className="rounded-2xl border bg-muted/10">
+                        <ScrollArea className="h-[min(58vh,560px)]">
+                          <StaffMemberList
+                            rows={incompleteRows}
+                            showDepartment
+                            emptyMessage="No incomplete staff accounts."
+                            {...tableEditProps}
+                          />
                         </ScrollArea>
                       </div>
                     </div>
                   ) : (
                     <>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search department, name, email, or staff ID…"
-                        className="pl-9"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant={showOnlyMissingHod ? "default" : "outline"}
-                      className={cn(
-                        showOnlyMissingHod &&
-                          "bg-yellow-600 hover:bg-yellow-600/90 dark:bg-yellow-700 dark:hover:bg-yellow-700/90",
-                      )}
-                      onClick={() => setShowOnlyMissingHod((v) => !v)}
-                    >
-                      <UserX className="h-4 w-4" />
-                      {showOnlyMissingHod ? "No HOD only" : "Without HOD"}
-                    </Button>
-                  </div>
-
-                  {filteredDepartments.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      No departments match your search or filter.
-                    </p>
-                  ) : (
-                    <Tabs
-                      value={activeTab}
-                      onValueChange={(v) => setActiveTab(v as "browse" | "results")}
-                      className="grid gap-4"
-                    >
-                      <TabsContent value="browse" className="mt-0">
-                        <div className="lg:hidden">
-                          <Select
-                            value={selectedDepartmentId != null ? String(selectedDepartmentId) : undefined}
-                            onValueChange={(v) => setSelectedDepartmentId(Number(v))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select department" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[min(60vh,320px)]">
-                              {filteredDepartments.map((dept) => (
-                                <SelectItem key={dept.departmentId} value={String(dept.departmentId)}>
-                                  <span className="line-clamp-1">
-                                    {dept.departmentName}
-                                    {!dept.hasHod ? " · No HOD" : ""} ({dept.staffCount})
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            placeholder="Search by department, name, email, or staff ID…"
+                            className="pl-9"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                          />
                         </div>
+                        <Button
+                          type="button"
+                          variant={showOnlyMissingHod ? "default" : "outline"}
+                          className={cn(
+                            showOnlyMissingHod &&
+                              "bg-yellow-600 hover:bg-yellow-600/90 dark:bg-yellow-700 dark:hover:bg-yellow-700/90",
+                          )}
+                          onClick={() => setShowOnlyMissingHod((v) => !v)}
+                        >
+                          <UserX className="h-4 w-4" />
+                          {showOnlyMissingHod ? "Showing: No HOD" : "Without HOD"}
+                        </Button>
+                      </div>
 
-                        <div className="grid gap-4 lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)] lg:items-start">
-                          <div className="hidden rounded-lg border lg:block">
-                            <div className="border-b px-3 py-2">
-                              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                                Departments
-                              </p>
-                              <p className="text-xs text-muted-foreground">Departments without HOD appear first</p>
+                      {filteredDepartments.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed px-4 py-12 text-center">
+                          <p className="text-sm font-medium">No departments match</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Try another search, or turn off the Without HOD filter.
+                          </p>
+                        </div>
+                      ) : (
+                        <Tabs
+                          value={activeTab}
+                          onValueChange={(v) => setActiveTab(v as "browse" | "results")}
+                          className="grid gap-4"
+                        >
+                          <TabsContent value="browse" className="mt-0">
+                            <div className="lg:hidden">
+                              <Label className="mb-1.5 block text-xs text-muted-foreground">Department</Label>
+                              <Select
+                                value={selectedDepartmentId != null ? String(selectedDepartmentId) : undefined}
+                                onValueChange={(v) => setSelectedDepartmentId(Number(v))}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select department" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[min(60vh,320px)]">
+                                  {filteredDepartments.map((dept) => (
+                                    <SelectItem key={dept.departmentId} value={String(dept.departmentId)}>
+                                      <span className="line-clamp-1">
+                                        {dept.departmentName}
+                                        {!dept.hasHod ? " · No HOD" : ""} ({dept.staffCount})
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
-                            <ScrollArea className="h-[min(58vh,520px)]">
-                              <div className="space-y-1 p-2">
-                                {filteredDepartments.map((dept) => (
-                                  <DepartmentListButton
-                                    key={dept.departmentId}
-                                    dept={dept}
-                                    isSelected={dept.departmentId === selectedDepartmentId}
-                                    onSelect={() => selectDepartment(dept.departmentId)}
-                                  />
-                                ))}
-                              </div>
-                            </ScrollArea>
-                          </div>
 
-                          <div className="min-w-0 rounded-lg border">
-                            {selectedDepartment ? (
-                              <>
-                                <div className="border-b px-4 py-3">
-                                  <h3 className="font-display text-lg font-semibold leading-snug tracking-tight">
-                                    {selectedDepartment.departmentName}
-                                  </h3>
-                                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline">{selectedDepartment.staffCount} staff</Badge>
-                                    {selectedDepartment.hasHod ? (
-                                      <Badge className="bg-emerald-600 hover:bg-emerald-600/90 dark:bg-emerald-700">
-                                        HOD: {selectedDepartment.hods.map((h) => h.fullName).join(", ")}
-                                      </Badge>
-                                    ) : (
-                                      <Badge
-                                        variant="outline"
-                                        className="border-yellow-500/30 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
-                                      >
-                                        <UserX className="mr-1 h-3 w-3" />
-                                        No HOD assigned
-                                      </Badge>
-                                    )}
-                                  </div>
+                            <div className="grid gap-4 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)] lg:items-start">
+                              <div className="hidden overflow-hidden rounded-2xl border lg:block">
+                                <div className="border-b bg-muted/30 px-4 py-3">
+                                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                    Departments
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    Departments without HOD are listed first
+                                  </p>
                                 </div>
-                                <ScrollArea className="h-[min(50vh,440px)]">
-                                  <div className="p-2">
-                                    <StaffTable rows={selectedDepartment.staff} {...tableEditProps} />
+                                <ScrollArea className="h-[min(58vh,560px)]">
+                                  <div className="space-y-1 p-2">
+                                    {filteredDepartments.map((dept) => (
+                                      <DepartmentListButton
+                                        key={dept.departmentId}
+                                        dept={dept}
+                                        isSelected={dept.departmentId === selectedDepartmentId}
+                                        onSelect={() => selectDepartment(dept.departmentId)}
+                                      />
+                                    ))}
                                   </div>
                                 </ScrollArea>
-                              </>
-                            ) : (
-                              <p className="px-4 py-12 text-center text-sm text-muted-foreground">
-                                Select a department to view staff.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </TabsContent>
+                              </div>
 
-                      <TabsContent value="results" className="mt-0">
-                        <p className="mb-3 text-sm text-muted-foreground">
-                          Showing {searchResultRows.length} staff matching &ldquo;{search.trim()}&rdquo;. Edit role or
-                          department inline.
-                        </p>
-                        <div className="rounded-lg border">
-                          <ScrollArea className="h-[min(58vh,520px)]">
-                            <div className="p-2">
-                              <StaffTable rows={searchResultRows} showDepartment {...tableEditProps} />
+                              <div className="min-w-0 overflow-hidden rounded-2xl border">
+                                {selectedDepartment ? (
+                                  <>
+                                    <div className="border-b bg-muted/20 px-4 py-4">
+                                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                        Selected department
+                                      </p>
+                                      <h3 className="mt-1 font-display text-xl font-semibold leading-snug tracking-tight">
+                                        {selectedDepartment.departmentName}
+                                      </h3>
+                                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Badge variant="secondary">{selectedDepartment.staffCount} staff</Badge>
+                                        {selectedDepartment.hasHod ? (
+                                          <Badge className="bg-emerald-600 hover:bg-emerald-600/90 dark:bg-emerald-700">
+                                            HOD: {selectedDepartment.hods.map((h) => h.fullName).join(", ")}
+                                          </Badge>
+                                        ) : (
+                                          <Badge
+                                            variant="outline"
+                                            className="border-yellow-500/30 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                                          >
+                                            <UserX className="mr-1 h-3 w-3" />
+                                            No HOD assigned
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <ScrollArea className="h-[min(50vh,480px)]">
+                                      <StaffMemberList
+                                        rows={selectedDepartment.staff}
+                                        emptyMessage="No staff in this department yet."
+                                        {...tableEditProps}
+                                      />
+                                    </ScrollArea>
+                                  </>
+                                ) : (
+                                  <p className="px-4 py-12 text-center text-sm text-muted-foreground">
+                                    Select a department to view staff.
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </ScrollArea>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
-                  )}
+                          </TabsContent>
+
+                          <TabsContent value="results" className="mt-0">
+                            <div className="mb-3 rounded-xl border bg-muted/20 px-4 py-3">
+                              <p className="text-sm font-medium">
+                                {searchResultRows.length} staff found for &ldquo;{search.trim()}&rdquo;
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                Update role or department on each card — changes save automatically.
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border bg-muted/10">
+                              <ScrollArea className="h-[min(58vh,560px)]">
+                                <StaffMemberList
+                                  rows={searchResultRows}
+                                  showDepartment
+                                  emptyMessage="No staff match this search."
+                                  {...tableEditProps}
+                                />
+                              </ScrollArea>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+                      )}
                     </>
                   )}
                 </CardContent>

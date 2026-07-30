@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { RequisitionHistoryCard } from "@/components/cpd/RequisitionHistoryCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,12 @@ import {
 } from "@/lib/requisitionStatus";
 import { cn } from "@/lib/utils";
 
+const PHASE_ICON_BADGE: Record<keyof typeof TRAFFIC_LIGHT_STYLES, string> = {
+  green: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  yellow: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  red: "bg-red-500/15 text-red-700 dark:text-red-300",
+  neutral: "bg-secondary text-secondary-foreground",
+};
 const PHASE_TABS: {
   value: Exclude<HistoryPhaseFilter, "all">;
   label: string;
@@ -135,33 +142,21 @@ export function RequisitionHistoryPanel({
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {PHASE_TABS.map((tab) => {
             const count = summary[tab.summaryKey] ?? 0;
-            const Icon = tab.icon;
             const active = phaseFilter === tab.value;
             const light = phaseFilterTrafficLight(tab.value);
             const styles = stylesFor(light);
 
             return (
-              <button
+              <InsightStatCard
                 key={tab.value}
-                type="button"
+                title={tab.label}
+                value={count}
+                description={tab.hint}
+                icon={tab.icon}
                 onClick={() => setPhaseFilter(active ? "all" : tab.value)}
-                className={cn(
-                  "rounded-xl border p-4 text-left transition-colors",
-                  active ? styles.summaryActive : styles.summaryIdle,
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    {!neutralStyle ? (
-                      <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} aria-hidden />
-                    ) : null}
-                    <Icon className={cn("h-4 w-4", active ? "text-foreground" : "text-muted-foreground")} />
-                  </span>
-                  <span className={cn("text-2xl font-bold tracking-tight", active && "text-foreground")}>{count}</span>
-                </div>
-                <p className={cn("mt-2 text-sm font-medium", active ? "text-foreground" : "text-foreground")}>{tab.label}</p>
-                {tab.hint ? <p className="mt-0.5 text-xs text-muted-foreground">{tab.hint}</p> : null}
-              </button>
+                className={cn(active ? styles.summaryActive : styles.summaryIdle)}
+                iconClassName={neutralStyle ? undefined : PHASE_ICON_BADGE[light]}
+              />
             );
           })}
         </div>

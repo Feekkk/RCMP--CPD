@@ -5,6 +5,7 @@ import { Award, CalendarCheck, CheckCircle2, ClipboardList, FileText, History, L
 import { toast } from "sonner";
 
 import { HodNeedActionCard } from "@/components/cpd/HodNeedActionCard";
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -305,21 +306,15 @@ export const HODDashboardPage = () => {
 
         <div className="container mx-auto py-8">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {stats.map((s) => (
-              <Card key={s.label}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{s.label}</CardTitle>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <s.icon className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="font-display text-2xl font-bold">
-                    {s.isLoading ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : s.value}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Academic year 2025/2026</p>
-                </CardContent>
-              </Card>
+            {stats.map((s, index) => (
+              <InsightStatCard
+                key={s.label}
+                title={s.label}
+                value={s.isLoading ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : s.value}
+                description="Academic year 2025/2026"
+                icon={s.icon}
+                featured={index === 0}
+              />
             ))}
           </div>
 

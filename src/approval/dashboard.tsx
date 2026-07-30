@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ApprovalDialog } from "@/approval/Approval";
 import { ApprovalSidebar } from "@/approval/Sidebar";
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -200,36 +201,22 @@ export function ApprovalDashboardPage() {
               const isActive = selectedView === view;
 
               return (
-                <button
+                <InsightStatCard
                   key={view}
-                  type="button"
+                  title={config.label}
+                  value={
+                    isStatsLoading ? (
+                      <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                    ) : (
+                      statValues[view]
+                    )
+                  }
+                  description={config.hint}
+                  icon={config.icon}
+                  featured={view === "pending"}
+                  className={cn(isActive && "ring-2 ring-primary/30")}
                   onClick={() => setSelectedView(view)}
-                  className="text-left"
-                >
-                  <Card
-                    className={cn(
-                      "h-full transition-colors hover:bg-accent/40",
-                      isActive && "border-primary ring-1 ring-primary/30",
-                    )}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">{config.label}</CardTitle>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <config.icon className="h-4 w-4" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="font-display text-2xl font-bold">
-                        {isStatsLoading ? (
-                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        ) : (
-                          statValues[view]
-                        )}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{config.hint}</p>
-                    </CardContent>
-                  </Card>
-                </button>
+                />
               );
             })}
           </div>

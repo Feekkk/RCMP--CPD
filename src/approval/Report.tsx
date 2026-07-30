@@ -2,6 +2,7 @@ import { ArrowUpRight, BarChart3, Loader2, ShieldCheck, TrendingUp, Users, FileT
 import { useQuery } from "@tanstack/react-query";
 
 import { ApprovalSidebar } from "@/approval/Sidebar";
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -140,21 +141,17 @@ export function ApprovalReportPage() {
           </Card>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {summaryCards.map((card) => (
-              <Card key={card.label}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{card.label}</CardTitle>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <card.icon className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="font-display text-2xl font-bold">
-                    {isReportLoading ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : card.value}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">{card.hint}</p>
-                </CardContent>
-              </Card>
+            {summaryCards.map((card, index) => (
+              <InsightStatCard
+                key={card.label}
+                title={card.label}
+                value={
+                  isReportLoading ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : card.value
+                }
+                description={card.hint}
+                icon={card.icon}
+                featured={index === 0}
+              />
             ))}
           </div>
 

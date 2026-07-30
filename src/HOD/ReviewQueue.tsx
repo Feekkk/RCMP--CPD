@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import { FUNDING_CLAIM_OPTIONS } from "@/components/cpd/FundingClaimFields";
 import { HodPostTrainingEvaluationDialog } from "@/components/cpd/HodPostTrainingEvaluationDialog";
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { PreTrainingStepper } from "@/components/cpd/PreTrainingStepper";
 import {
   AlertDialog,
@@ -63,7 +64,6 @@ import {
   formatProgrammeDates,
   preTrainingSteps,
   statusGroupFromDb,
-  statusGroupTrafficLight,
   TRAFFIC_LIGHT_STYLES,
 } from "@/lib/requisitionStatus";
 import { cn } from "@/lib/utils";
@@ -105,16 +105,6 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
 type HodReviewStatusFilter = "all" | "submitted" | "pending";
 type ReviewPageTab = "pre_training" | "post_training";
 type HodPostTrainingFilter = "all" | "due" | "upcoming" | "completed";
-
-const STATUS_FILTER_TABS: {
-  value: HodReviewStatusFilter;
-  label: string;
-  summaryKey: "total" | "pending" | "recommended";
-}[] = [
-  { value: "all", label: "All", summaryKey: "total" },
-  { value: "submitted", label: "Submitted", summaryKey: "pending" },
-  { value: "pending", label: "In review", summaryKey: "recommended" },
-];
 
 function matchesStatusFilter(row: HodReviewQueueItem, filter: HodReviewStatusFilter) {
   if (filter === "all") return true;
@@ -700,51 +690,42 @@ export function HODReviewQueuePage() {
             {activeSummaryCards.map((c) => {
               const styles = TRAFFIC_LIGHT_STYLES[c.trafficLight];
               const isActive = c.filter !== null && activeFilter === c.filter;
-              const card = (
-                <Card className="border-0 bg-transparent shadow-none">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
-                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", styles.bg)}>
-                      <c.icon className={cn("h-4 w-4", styles.text)} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="font-display text-2xl font-bold">{c.value}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{c.hint}</p>
-                  </CardContent>
-                </Card>
-              );
-
-              if (c.filter === null) {
-                return (
-                  <div
-                    key={c.label}
-                    className={cn("rounded-xl border", styles.summaryIdle)}
-                  >
-                    {card}
-                  </div>
-                );
-              }
+              const iconBadge =
+                c.trafficLight === "green"
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : c.trafficLight === "yellow"
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : c.trafficLight === "red"
+                      ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                      : undefined;
 
               return (
-                <button
+                <InsightStatCard
                   key={c.filter ?? c.label}
-                  type="button"
-                  onClick={() => {
-                    if (c.filter === null) return;
-                    if (pageTab === "pre_training") {
-                      setStatusFilter(c.filter as HodReviewStatusFilter);
-                    } else {
-                      setPostTrainingFilter(c.filter as HodPostTrainingFilter);
-                    }
-                  }}
+                  title={c.label}
+                  value={c.value}
+                  description={c.hint}
+                  icon={c.icon}
+                  iconClassName={iconBadge}
                   className={cn(
-                    "rounded-xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    c.filter === null ? styles.summaryIdle : isActive ? styles.summaryActive : styles.summaryIdle,
+                    c.filter === null
+                      ? styles.summaryIdle
+                      : isActive
+                        ? styles.summaryActive
+                        : styles.summaryIdle,
                   )}
-                >
-                  {card}
-                </button>
+                  onClick={
+                    c.filter === null
+                      ? undefined
+                      : () => {
+                          if (pageTab === "pre_training") {
+                            setStatusFilter(c.filter as HodReviewStatusFilter);
+                          } else {
+                            setPostTrainingFilter(c.filter as HodPostTrainingFilter);
+                          }
+                        }
+                  }
+                />
               );
             })}
           </div>
@@ -756,40 +737,6 @@ export function HODReviewQueuePage() {
               <CardDescription>Review and recommend staff CPD requests from your department.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as HodReviewStatusFilter)}>
-                <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
-                  {STATUS_FILTER_TABS.map((tab) => {
-                    const light =
-                      tab.value === "all" ? "neutral" : statusGroupTrafficLight(tab.value);
-                    const styles = TRAFFIC_LIGHT_STYLES[light];
-                    const count =
-                      tab.summaryKey === "total"
-                        ? summary.total
-                        : tab.summaryKey === "pending"
-                          ? summary.pending
-                          : summary.recommended;
-                    return (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className={cn("gap-1.5 text-xs sm:text-sm", styles.tabActive)}
-                      >
-                        <span className={cn("h-2 w-2 rounded-full", styles.dot)} aria-hidden />
-                        {tab.label}
-                        <span
-                          className={cn(
-                            "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                            tab.value === "all" ? "bg-muted text-foreground" : cn(styles.bg, styles.text),
-                          )}
-                        >
-                          {count}
-                        </span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </Tabs>
-
               {isError ? (
                 <p className="py-8 text-center text-sm text-destructive">
                   {error instanceof Error ? error.message : "Unable to load review queue."}
@@ -871,29 +818,6 @@ export function HODReviewQueuePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <Tabs
-                value={postTrainingFilter}
-                onValueChange={(value) => setPostTrainingFilter(value as HodPostTrainingFilter)}
-              >
-                <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
-                  {(
-                    [
-                      { value: "all", label: "All", count: postTrainingSummary.total },
-                      { value: "due", label: "Due now", count: postTrainingSummary.due },
-                      { value: "upcoming", label: "Upcoming", count: postTrainingSummary.upcoming },
-                      { value: "completed", label: "Completed", count: postTrainingSummary.completed },
-                    ] as const
-                  ).map((tab) => (
-                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5 text-xs sm:text-sm">
-                      {tab.label}
-                      <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
-                        {tab.count}
-                      </span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
               {isPostTrainingError ? (
                 <p className="py-8 text-center text-sm text-destructive">
                   {postTrainingError instanceof Error ? postTrainingError.message : "Unable to load evaluations."}

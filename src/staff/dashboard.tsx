@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { NeedActionCard } from "@/components/cpd/NeedActionCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
 import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
@@ -23,7 +24,6 @@ import {
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
-import { cn } from "@/lib/utils";
 
 const CURRENT_YEAR_LABEL = `Year ${new Date().getFullYear()}`;
 const COMPLETED_HOURS_MOCK = 18;
@@ -32,25 +32,10 @@ type TrackStatus = "off-track" | "need-attention" | "on-track";
 
 const TRACK_STATUS_MOCK: TrackStatus = "need-attention";
 
-const trackStatusMeta: Record<
-  TrackStatus,
-  { label: string; valueClass: string; iconClass: string }
-> = {
-  "on-track": {
-    label: "On-track",
-    valueClass: "text-green-600 dark:text-green-400",
-    iconClass: "bg-green-500/10 text-green-600 dark:text-green-400",
-  },
-  "need-attention": {
-    label: "Need Attention",
-    valueClass: "text-yellow-600 dark:text-yellow-400",
-    iconClass: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  },
-  "off-track": {
-    label: "Off-Track",
-    valueClass: "text-red-600 dark:text-red-400",
-    iconClass: "bg-red-500/10 text-red-600 dark:text-red-400",
-  },
+const trackStatusMeta: Record<TrackStatus, { label: string }> = {
+  "on-track": { label: "On-track" },
+  "need-attention": { label: "Need Attention" },
+  "off-track": { label: "Off-Track" },
 };
 
 export const StaffDashboardPage = () => {
@@ -105,50 +90,33 @@ export const StaffDashboardPage = () => {
 
         <div className="container mx-auto py-8">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <CheckCircle2 className="h-4 w-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="font-display text-2xl font-bold">{COMPLETED_HOURS_MOCK}h</p>
-                <p className="mt-1 text-xs text-muted-foreground">{CURRENT_YEAR_LABEL}</p>
-              </CardContent>
-            </Card>
+            <InsightStatCard
+              title="Completed"
+              value={`${COMPLETED_HOURS_MOCK}h`}
+              description={CURRENT_YEAR_LABEL}
+              icon={CheckCircle2}
+            />
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Requisition</CardTitle>
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <FileText className="h-4 w-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="font-display text-2xl font-bold">
-                  {isRecentLoading ? (
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  ) : (
-                    submittedRequisitions
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">Submitted requisitions</p>
-              </CardContent>
-            </Card>
+            <InsightStatCard
+              title="Total Requisition"
+              value={
+                isRecentLoading ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                ) : (
+                  submittedRequisitions
+                )
+              }
+              description="Submitted requisitions"
+              icon={FileText}
+            />
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Your Status</CardTitle>
-                <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", trackStatus.iconClass)}>
-                  <Activity className="h-4 w-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className={cn("font-display text-2xl font-bold", trackStatus.valueClass)}>{trackStatus.label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Complete you training to stay on track</p>
-              </CardContent>
-            </Card>
+            <InsightStatCard
+              title="Your Status"
+              value={trackStatus.label}
+              description="Complete you training to stay on track"
+              icon={Activity}
+              featured
+            />
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-3">

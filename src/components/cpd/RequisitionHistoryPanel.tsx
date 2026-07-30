@@ -57,7 +57,7 @@ const PHASE_TABS: {
     {
       value: "completed",
       label: "Completed",
-      hint: "All steps done, CPD points counted",
+      hint: "All steps done, CPD hours counted",
       summaryKey: "completed",
       icon: Award,
     },

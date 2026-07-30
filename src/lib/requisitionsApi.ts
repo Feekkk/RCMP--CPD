@@ -47,8 +47,8 @@ export type PostTrainingInfo = {
   attendanceAttached: boolean;
   eSurveyFilled: boolean;
   hodEvaluationFilled: boolean;
-  cpdPointsCounted: boolean;
-  cpdPoints: number | null;
+  cpdHoursCounted: boolean;
+  cpdHours: number | null;
   completedSteps: number;
   totalSteps: number;
   isComplete: boolean;
@@ -507,6 +507,23 @@ export async function fetchRequisitionHistory({
   }
 
   return res.json() as Promise<RequisitionHistoryResponse>;
+}
+
+export type StaffDashboardStats = {
+  cpdCompletedHours: number;
+  cpdTargetHours: number;
+  trackStatus: CpdTrackStatus;
+  submittedRequisitions: number;
+};
+
+export async function fetchStaffDashboardStats(): Promise<StaffDashboardStats> {
+  const res = await fetch("/api/requisitions/staff/dashboard-stats", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load dashboard stats."));
+  }
+
+  return res.json() as Promise<StaffDashboardStats>;
 }
 
 export async function fetchHodReviewQueue(): Promise<HodReviewQueueResponse> {

@@ -12,6 +12,11 @@ import { fetchApprovalReportStats } from "@/lib/requisitionsApi";
 
 const reportMonth = new Date().toLocaleDateString("en-MY", { month: "long", year: "numeric" });
 
+function formatCpdHours(hours: number) {
+  const rounded = Math.round(hours * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 function departmentRiskBadgeClass(risk: "Low" | "Moderate" | "High") {
   if (risk === "Moderate") {
     return "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300";
@@ -58,6 +63,7 @@ export function ApprovalReportPage() {
     (best, item) => (item.hours > best.hours ? item : best),
     monthlyTrend[0] ?? { month: "", hours: 0 },
   );
+  const overallAverage = totalStaff ? Math.round((totalHours / totalStaff) * 10) / 10 : 0;
 
   const snapshot = buildExecutiveSnapshot({
     totalStaff,
@@ -83,8 +89,8 @@ export function ApprovalReportPage() {
       icon: FileText,
     },
     {
-      label: "Training hours logged",
-      value: `${totalHours}h`,
+      label: "CPD Hours logged",
+      value: formatCpdHours(totalHours),
       hint: "Across internal and external programmes",
       icon: TrendingUp,
     },
@@ -157,8 +163,8 @@ export function ApprovalReportPage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Average hours attended</CardTitle>
-              <CardDescription>CPD hours logged per staff member, split by Academic and Services divisions.</CardDescription>
+              <CardTitle>Average CPD Hours attended</CardTitle>
+              <CardDescription>CPD Hours logged per staff member, split by Academic and Services divisions.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid gap-4 lg:grid-cols-2">
@@ -170,14 +176,14 @@ export function ApprovalReportPage() {
                         {isReportLoading ? (
                           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
                         ) : (
-                          `${academicDivision.totalHours}h`
+                          formatCpdHours(academicDivision.totalHours)
                         )}
                       </p>
                     </div>
                     <Badge variant="secondary">{academicDivision.staffCount} staff</Badge>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {academicDivision.averageHours}h average per staff member.
+                    {formatCpdHours(academicDivision.averageHours)} CPD Hours average per staff member.
                   </p>
                 </div>
                 <div className="rounded-xl border p-4">
@@ -188,14 +194,14 @@ export function ApprovalReportPage() {
                         {isReportLoading ? (
                           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
                         ) : (
-                          `${servicesDivision.totalHours}h`
+                          formatCpdHours(servicesDivision.totalHours)
                         )}
                       </p>
                     </div>
                     <Badge variant="outline">{servicesDivision.staffCount} staff</Badge>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {servicesDivision.averageHours}h average per staff member.
+                    {formatCpdHours(servicesDivision.averageHours)} CPD Hours average per staff member.
                   </p>
                 </div>
               </div>
@@ -203,13 +209,21 @@ export function ApprovalReportPage() {
                 <div className="rounded-xl border bg-card p-4">
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Academic avg</p>
                   <p className="mt-2 text-lg font-semibold">
-                    {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${academicDivision.averageHours}h`}
+                    {isReportLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      formatCpdHours(academicDivision.averageHours)
+                    )}
                   </p>
                 </div>
                 <div className="rounded-xl border bg-card p-4">
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Services avg</p>
                   <p className="mt-2 text-lg font-semibold">
-                    {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${servicesDivision.averageHours}h`}
+                    {isReportLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      formatCpdHours(servicesDivision.averageHours)
+                    )}
                   </p>
                 </div>
                 <div className="rounded-xl border bg-card p-4">
@@ -218,7 +232,7 @@ export function ApprovalReportPage() {
                     {isReportLoading ? (
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     ) : (
-                      `${totalStaff ? Math.round((totalHours / totalStaff) * 10) / 10 : 0}h`
+                      formatCpdHours(overallAverage)
                     )}
                   </p>
                 </div>
@@ -240,7 +254,7 @@ export function ApprovalReportPage() {
                 ) : topDepartments.length === 0 ? (
                   <div className="rounded-lg border border-dashed py-12 text-center">
                     <p className="font-medium text-foreground">No department data yet</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Departments will appear once staff log CPD hours.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Departments will appear once staff log CPD Hours.</p>
                   </div>
                 ) : (
                   <div className="rounded-lg border">
@@ -250,7 +264,7 @@ export function ApprovalReportPage() {
                           <TableHead>Department</TableHead>
                           <TableHead className="hidden md:table-cell">Staff</TableHead>
                           <TableHead>Completion</TableHead>
-                          <TableHead className="hidden md:table-cell">Avg hours</TableHead>
+                          <TableHead className="hidden md:table-cell">Avg CPD Hours</TableHead>
                           <TableHead className="text-right">Risk</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -268,7 +282,7 @@ export function ApprovalReportPage() {
                                 <Progress value={row.completion} />
                               </div>
                             </TableCell>
-                            <TableCell className="hidden md:table-cell">{row.avgHours}h</TableCell>
+                            <TableCell className="hidden md:table-cell">{formatCpdHours(row.avgHours)}</TableCell>
                             <TableCell className="text-right">
                               <Badge
                                 variant={row.risk === "High" ? "destructive" : "outline"}
@@ -289,7 +303,7 @@ export function ApprovalReportPage() {
             <Card className="xl:col-span-2">
               <CardHeader>
                 <CardTitle>Monthly learning trend</CardTitle>
-                <CardDescription>Total CPD hours recorded over the last 4 months.</CardDescription>
+                <CardDescription>Total CPD Hours recorded over the last 4 months.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {isReportLoading ? (
@@ -302,7 +316,7 @@ export function ApprovalReportPage() {
                       <div key={item.monthKey} className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="font-medium">{item.month}</span>
-                          <span className="text-muted-foreground">{item.hours}h</span>
+                          <span className="text-muted-foreground">{formatCpdHours(item.hours)} CPD Hours</span>
                         </div>
                         <div className="h-3 rounded-full bg-muted">
                           <div

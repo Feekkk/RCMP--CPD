@@ -21,34 +21,38 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
+import { fetchRequisitionHistory, fetchStaffDashboardStats, type CpdTrackStatus } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
 
 const CURRENT_YEAR_LABEL = `Year ${new Date().getFullYear()}`;
-const COMPLETED_HOURS_MOCK = 18;
 
-type TrackStatus = "off-track" | "need-attention" | "on-track";
-
-const TRACK_STATUS_MOCK: TrackStatus = "need-attention";
-
-const trackStatusMeta: Record<TrackStatus, { label: string }> = {
+const trackStatusMeta: Record<CpdTrackStatus, { label: string }> = {
   "on-track": { label: "On-track" },
   "need-attention": { label: "Need Attention" },
   "off-track": { label: "Off-Track" },
 };
 
+function formatCpdHours(hours: number) {
+  const rounded = Math.round(hours * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 export const StaffDashboardPage = () => {
+  const { data: stats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ["requisitions", "staff", "dashboard-stats"],
+    queryFn: fetchStaffDashboardStats,
+  });
+
   const { data: requisitionData, isLoading: isRecentLoading, isError: isRecentError } = useQuery({
     queryKey: ["requisitions", "history", "dashboard"],
     queryFn: () => fetchRequisitionHistory({ phase: "all", page: 1, pageSize: 5 }),
   });
 
-  const submittedRequisitions = requisitionData?.summary
-    ? requisitionData.summary.all - requisitionData.summary.draft
-    : 0;
+  const completedHours = stats?.cpdCompletedHours ?? 0;
+  const submittedRequisitions = stats?.submittedRequisitions ?? 0;
+  const trackStatus = trackStatusMeta[stats?.trackStatus ?? "need-attention"];
   const recentActivity = requisitionData?.requisitions ?? [];
-  const trackStatus = trackStatusMeta[TRACK_STATUS_MOCK];
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -91,16 +95,22 @@ export const StaffDashboardPage = () => {
         <div className="container mx-auto py-8">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <InsightStatCard
-              title="Completed"
-              value={`${COMPLETED_HOURS_MOCK}h`}
-              description={CURRENT_YEAR_LABEL}
+              title="CPD Hours"
+              value={
+                isStatsLoading ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                ) : (
+                  formatCpdHours(completedHours)
+                )
+              }
+              description={`${CURRENT_YEAR_LABEL}`}
               icon={CheckCircle2}
             />
 
             <InsightStatCard
               title="Total Requisition"
               value={
-                isRecentLoading ? (
+                isStatsLoading ? (
                   <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
                 ) : (
                   submittedRequisitions
@@ -112,8 +122,14 @@ export const StaffDashboardPage = () => {
 
             <InsightStatCard
               title="Your Status"
-              value={trackStatus.label}
-              description="Complete you training to stay on track"
+              value={
+                isStatsLoading ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                ) : (
+                  trackStatus.label
+                )
+              }
+              description="Complete your training to stay on track"
               icon={Activity}
               featured
             />
@@ -160,8 +176,8 @@ export const StaffDashboardPage = () => {
                               statusGroup={item.statusGroup}
                               label={statusDetailLabel(item.status)}
                             />
-                            {item.postTraining.cpdPoints != null ? (
-                              <Badge variant="secondary">{item.postTraining.cpdPoints} pts</Badge>
+                            {item.postTraining.cpdHours != null ? (
+                              <Badge variant="secondary">{item.postTraining.cpdHours} CPD Hours</Badge>
                             ) : (
                               <p className="max-w-[140px] truncate text-right text-sm text-muted-foreground">
                                 {item.category}

@@ -102,17 +102,17 @@ export function PostTrainingChecklist({
         })}
       </ol>
 
-      {allDone && postTraining.cpdPointsCounted ? (
+      {allDone && postTraining.cpdHoursCounted ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Star className={cn("h-3.5 w-3.5", TRAFFIC_LIGHT_STYLES.green.text)} />
           <span className={cn(TRAFFIC_LIGHT_STYLES.green.text, "font-medium")}>
-            CPD points recorded{postTraining.cpdPoints != null ? ` · ${postTraining.cpdPoints} pts` : ""}
+            CPD hours recorded{postTraining.cpdHours != null ? ` · ${postTraining.cpdHours} CPD Hours` : ""}
           </span>
         </p>
       ) : locked ? (
         <p className="text-xs text-muted-foreground">Unlocks after the programme date.</p>
       ) : postTraining.completedSteps < postTraining.totalSteps ? (
-        <p className="text-xs text-muted-foreground">Complete all items to count CPD points.</p>
+        <p className="text-xs text-muted-foreground">Complete all items to count CPD hours.</p>
       ) : null}
     </div>
   );

@@ -115,7 +115,7 @@ function buildDivisionHoursSummary(rows, targetHours) {
   return {
     academic: {
       staffCount: totals.academic.staffCount,
-      totalHours: totals.academic.totalHours,
+      totalHours: Math.round(totals.academic.totalHours * 100) / 100,
       averageHours:
         totals.academic.staffCount > 0
           ? Math.round((totals.academic.totalHours / totals.academic.staffCount) * 10) / 10
@@ -124,7 +124,7 @@ function buildDivisionHoursSummary(rows, targetHours) {
     },
     services: {
       staffCount: totals.services.staffCount,
-      totalHours: totals.services.totalHours,
+      totalHours: Math.round(totals.services.totalHours * 100) / 100,
       averageHours:
         totals.services.staffCount > 0
           ? Math.round((totals.services.totalHours / totals.services.staffCount) * 10) / 10
@@ -488,7 +488,7 @@ function mapHodPostTrainingRow(row) {
   const unlocked = isHodEvaluationUnlocked(lastProgrammeDate);
   const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
   const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
-  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const cpdHoursCounted = Number(row.cpd_points_counted ?? 0) === 1;
   const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
   const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
 
@@ -518,11 +518,11 @@ function mapHodPostTrainingRow(row) {
       attendanceAttached,
       eSurveyFilled,
       hodEvaluationFilled,
-      cpdPointsCounted,
-      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      cpdHoursCounted,
+      cpdHours: row.cpd_points != null ? Number(row.cpd_points) : null,
       completedSteps: postTrainingCompleted,
       totalSteps: 3,
-      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+      isComplete: cpdHoursCounted || postTrainingCompleted === 3,
     },
   };
 }
@@ -868,7 +868,79 @@ async function queryAdminDashboardStats(pool) {
 
 const CPD_TARGET_HOURS = 40;
 
+function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
+  const percent = CPD_TARGET_HOURS ? (Number(completedHours) / CPD_TARGET_HOURS) * 100 : 0;
+  if (percent >= 50) return "on-track";
+  if (percent < 25 && activeRequisitions === 0) return "off-track";
+  if (percent < 50 || activeRequisitions > 0) return "need-attention";
+  return "on-track";
+}
+
+const PROGRAMME_DURATION_HOURS_SQL = `ROUND((
+  CASE WHEN rd.time_1 IS NOT NULL AND rd.time_to_1 IS NOT NULL AND rd.time_to_1 > rd.time_1
+    THEN TIME_TO_SEC(TIMEDIFF(rd.time_to_1, rd.time_1)) ELSE 0 END
+  + CASE WHEN rd.time_2 IS NOT NULL AND rd.time_to_2 IS NOT NULL AND rd.time_to_2 > rd.time_2
+    THEN TIME_TO_SEC(TIMEDIFF(rd.time_to_2, rd.time_2)) ELSE 0 END
+  + CASE WHEN rd.time_3 IS NOT NULL AND rd.time_to_3 IS NOT NULL AND rd.time_to_3 > rd.time_3
+    THEN TIME_TO_SEC(TIMEDIFF(rd.time_to_3, rd.time_3)) ELSE 0 END
+  + CASE WHEN rd.time_4 IS NOT NULL AND rd.time_to_4 IS NOT NULL AND rd.time_to_4 > rd.time_4
+    THEN TIME_TO_SEC(TIMEDIFF(rd.time_to_4, rd.time_4)) ELSE 0 END
+  + CASE WHEN rd.time_5 IS NOT NULL AND rd.time_to_5 IS NOT NULL AND rd.time_to_5 > rd.time_5
+    THEN TIME_TO_SEC(TIMEDIFF(rd.time_to_5, rd.time_5)) ELSE 0 END
+) / 3600, 2)`;
+
+async function syncCountedCpdHoursFromProgrammeTimes(pool) {
+  await pool.execute(
+    `UPDATE post_training pt
+     INNER JOIN requisitions r ON r.id = pt.requisition_id
+     INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+     SET pt.cpd_points = ${PROGRAMME_DURATION_HOURS_SQL}
+     WHERE pt.cpd_points_counted = 1`,
+  );
+}
+
+async function queryStaffDashboardStats(pool, staffId) {
+  await syncCountedCpdHoursFromProgrammeTimes(pool);
+
+  const [[hoursRows], [activeRows], [submittedRows]] = await Promise.all([
+    pool.execute(
+      `SELECT COALESCE(SUM(pt.cpd_points), 0) AS completed_hours
+       FROM post_training pt
+       INNER JOIN requisitions r ON r.id = pt.requisition_id
+       WHERE r.submitted_by = ? AND pt.cpd_points_counted = 1`,
+      [staffId],
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       WHERE r.submitted_by = ?
+         AND rs.details IN ('submitted', 'being_process', 'verified', 'approved')`,
+      [staffId],
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS cnt
+       FROM requisitions r
+       INNER JOIN requisition_status rs ON rs.id = r.status_id
+       WHERE r.submitted_by = ? AND rs.details <> 'save_draft'`,
+      [staffId],
+    ),
+  ]);
+
+  const cpdCompletedHours = Math.round(Number(hoursRows[0]?.completed_hours ?? 0) * 100) / 100;
+  const activeRequisitions = Number(activeRows[0]?.cnt ?? 0);
+
+  return {
+    cpdCompletedHours,
+    cpdTargetHours: CPD_TARGET_HOURS,
+    trackStatus: deriveCpdTrackStatus(cpdCompletedHours, activeRequisitions),
+    submittedRequisitions: Number(submittedRows[0]?.cnt ?? 0),
+  };
+}
+
 async function queryAdminReportStats(pool) {
+  await syncCountedCpdHoursFromProgrammeTimes(pool);
+
   const [
     [totalStaffRows],
     [compliantStaffRows],
@@ -974,7 +1046,7 @@ async function queryAdminReportStats(pool) {
   const compliantStaff = Number(compliantStaffRows[0]?.cnt ?? 0);
   const approvedRequisitionsThisMonth = Number(approvedRows[0]?.cnt ?? 0);
   const submittedRequisitionsThisMonth = Number(submittedRows[0]?.cnt ?? 0);
-  const totalTrainingHours = Number(hoursRows[0]?.total_hours ?? 0);
+  const totalTrainingHours = Math.round(Number(hoursRows[0]?.total_hours ?? 0) * 100) / 100;
   const participantsThisMonth = Number(participantsRows[0]?.cnt ?? 0);
   const divisionHours = buildDivisionHoursSummary(divisionStaffRows, CPD_TARGET_HOURS);
   const departments = buildTopDepartments(departmentRows, null);
@@ -1839,7 +1911,7 @@ function mapHistoryRow(row) {
   const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
   const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
   const hodEvaluationFilled = Number(row.hod_evaluation_filled ?? 0) === 1;
-  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const cpdHoursCounted = Number(row.cpd_points_counted ?? 0) === 1;
   const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
   const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
 
@@ -1866,11 +1938,11 @@ function mapHistoryRow(row) {
       attendanceAttached,
       eSurveyFilled,
       hodEvaluationFilled,
-      cpdPointsCounted,
-      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      cpdHoursCounted,
+      cpdHours: row.cpd_points != null ? Number(row.cpd_points) : null,
       completedSteps: postTrainingCompleted,
       totalSteps: 3,
-      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+      isComplete: cpdHoursCounted || postTrainingCompleted === 3,
     },
   };
 }
@@ -2748,10 +2820,40 @@ async function ensurePostTrainingRow(conn, requisitionId) {
   }
 }
 
+function timeToMinutes(value) {
+  const text = formatTimeForInput(value);
+  if (!text) return null;
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
+ * CPD hours are derived from the start/end time of each requisition
+ * programme slot (1 hour = 1 CPD hour). Minutes are kept in the running
+ * total for accuracy (e.g. 1h30m = 1.5 CPD hours) but are never surfaced
+ * to the UI as a separate unit — only the resulting CPD hours value is shown.
+ */
+function computeCpdHoursFromSlots(row) {
+  let totalMinutes = 0;
+  for (let i = 1; i <= 5; i += 1) {
+    const from = timeToMinutes(row[`time_${i}`]);
+    const to = timeToMinutes(row[`time_to_${i}`]);
+    if (from == null || to == null || to <= from) continue;
+    totalMinutes += to - from;
+  }
+  return Math.round((totalMinutes / 60) * 100) / 100;
+}
+
 async function maybeCountCpdPoints(conn, requisitionId) {
   const [rows] = await conn.execute(
-    `SELECT attendance_attached, e_survey_filled, hod_evaluation_filled, cpd_points_counted
-     FROM post_training WHERE requisition_id = ?`,
+    `SELECT pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled, pt.cpd_points_counted,
+            rd.time_1, rd.time_to_1, rd.time_2, rd.time_to_2, rd.time_3, rd.time_to_3,
+            rd.time_4, rd.time_to_4, rd.time_5, rd.time_to_5
+     FROM post_training pt
+     INNER JOIN requisitions r ON r.id = pt.requisition_id
+     INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+     WHERE pt.requisition_id = ?`,
     [requisitionId],
   );
   const row = rows[0];
@@ -2761,9 +2863,10 @@ async function maybeCountCpdPoints(conn, requisitionId) {
     Number(row.e_survey_filled ?? 0) === 1 &&
     Number(row.hod_evaluation_filled ?? 0) === 1;
   if (!complete) return;
+  const cpdHours = computeCpdHoursFromSlots(row);
   await conn.execute(
-    `UPDATE post_training SET cpd_points_counted = 1, cpd_points = COALESCE(cpd_points, 0) WHERE requisition_id = ?`,
-    [requisitionId],
+    `UPDATE post_training SET cpd_points_counted = 1, cpd_points = ? WHERE requisition_id = ?`,
+    [cpdHours, requisitionId],
   );
 }
 
@@ -2789,7 +2892,7 @@ function mapPostTrainingDetail(row) {
   const attendanceAttached = Number(row.attendance_attached ?? 0) === 1;
   const eSurveyFilled = Number(row.e_survey_filled ?? 0) === 1;
   const hodEvaluationFilled = Number(row.hod_evaluation_filled ?? 0) === 1;
-  const cpdPointsCounted = Number(row.cpd_points_counted ?? 0) === 1;
+  const cpdHoursCounted = Number(row.cpd_points_counted ?? 0) === 1;
   const postTrainingSteps = [attendanceAttached, eSurveyFilled, hodEvaluationFilled];
   const postTrainingCompleted = postTrainingSteps.filter(Boolean).length;
   const attendancePath = row.attendance_path ? String(row.attendance_path) : null;
@@ -2808,11 +2911,11 @@ function mapPostTrainingDetail(row) {
       attendanceAttached,
       eSurveyFilled,
       hodEvaluationFilled,
-      cpdPointsCounted,
-      cpdPoints: row.cpd_points != null ? Number(row.cpd_points) : null,
+      cpdHoursCounted,
+      cpdHours: row.cpd_points != null ? Number(row.cpd_points) : null,
       completedSteps: postTrainingCompleted,
       totalSteps: 3,
-      isComplete: cpdPointsCounted || postTrainingCompleted === 3,
+      isComplete: cpdHoursCounted || postTrainingCompleted === 3,
       attendanceFileName: attendancePath ? path.basename(attendancePath) : null,
       eSurveyResponses: parseSurveyResponses(row.e_survey_responses),
     },
@@ -3076,6 +3179,17 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     }
   });
 
+  apiRouter.get("/requisitions/staff/dashboard-stats", generalLimiter, requireAuth, async (req, res) => {
+    try {
+      const result = await queryStaffDashboardStats(pool, req.session.user.staffId);
+      return res.json(result);
+    } catch (err) {
+      console.error("Staff dashboard stats error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
   apiRouter.get("/requisitions/logs", generalLimiter, requireAuth, async (req, res) => {
     try {
       const page = parsePositiveInt(req.query.page, 1);
@@ -3164,17 +3278,9 @@ export function registerRequisitionRoutes(apiRouter, { pool, generalLimiter }) {
     }
   });
 
-function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
-  const target = 40;
-  const percent = target ? (Number(completedHours) / target) * 100 : 0;
-  if (percent >= 50) return "on-track";
-  if (percent < 25 && activeRequisitions === 0) return "off-track";
-  if (percent < 50 || activeRequisitions > 0) return "need-attention";
-  return "on-track";
-}
-
   apiRouter.get("/requisitions/hod/department-staff", generalLimiter, requireHod, async (req, res) => {
     try {
+      await syncCountedCpdHoursFromProgrammeTimes(pool);
       const [rows] = await pool.execute(
         `SELECT s.id, s.email, s.role_id, r.role_name,
                 COALESCE(cpd.completed_hours, 0) AS cpd_completed_hours,

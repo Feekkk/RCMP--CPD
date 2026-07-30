@@ -119,7 +119,7 @@ const WORKFLOW_PHASE_DESCRIPTION: Record<WorkflowPhase, string> = {
   draft: "Saved but not yet submitted for approval.",
   pre_training: "Submitted and moving through approval, or approved and awaiting the programme date.",
   post_training: "Training has ended — complete attendance, e-survey, and HOD evaluation.",
-  completed: "All requirements met and CPD points recorded.",
+  completed: "All requirements met and CPD hours recorded.",
   rejected: "Requisition was not approved.",
 };
 

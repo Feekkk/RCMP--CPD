@@ -1,6 +1,4 @@
-import { ArrowRight, BookOpen, ClipboardCheck, ShieldCheck, Target } from "lucide-react";
-import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { ClipboardCheck, ShieldCheck, Target } from "lucide-react";
 
 const PILLARS = [
   {
@@ -38,21 +36,6 @@ export const Hero = () => {
             The official platform for UniKL RCMP staff to plan, submit, and track Continuous
             Professional Development requisitions and annual training hours.
           </p>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button size="lg" className="group h-12 px-7 text-base" asChild>
-              <Link to="/login">
-                Staff Login
-                <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" className="h-12 px-7 text-base" asChild>
-              <a href="#faq">
-                <BookOpen className="mr-1 h-4 w-4" />
-                View Guidelines
-              </a>
-            </Button>
-          </div>
         </div>
 
         <div className="mx-auto mt-14 grid max-w-4xl gap-4 sm:grid-cols-3">

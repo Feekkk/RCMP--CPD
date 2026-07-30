@@ -3,11 +3,8 @@ import {
   Activity,
   CalendarCheck,
   CheckCircle2,
-  FileSearch,
   FileText,
-  History,
   Loader2,
-  type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -23,7 +20,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/requisitionStatus";
 import { StaffSidebar } from "@/staff/Sidebar";
@@ -56,38 +52,6 @@ const trackStatusMeta: Record<
     iconClass: "bg-red-500/10 text-red-600 dark:text-red-400",
   },
 };
-
-const quickActions: Array<{
-  to: string;
-  icon: LucideIcon;
-  label: string;
-  description: string;
-}> = [
-  {
-    to: "/staff/requisition",
-    icon: FileText,
-    label: "Create requisition",
-    description: "Submit a new CPD training request",
-  },
-  {
-    to: "/staff/requisition/track",
-    icon: FileSearch,
-    label: "Track requisition",
-    description: "Check status and approval progress",
-  },
-  {
-    to: "/staff/calendar",
-    icon: CalendarCheck,
-    label: "Your calendar",
-    description: "View planned programmes and deadlines",
-  },
-  {
-    to: "/staff/history",
-    icon: History,
-    label: "View history",
-    description: "Browse past submissions and outcomes",
-  },
-];
 
 export const StaffDashboardPage = () => {
   const { data: requisitionData, isLoading: isRecentLoading, isError: isRecentError } = useQuery({
@@ -252,38 +216,6 @@ export const StaffDashboardPage = () => {
             </div>
 
             <div className="grid gap-4">
-              <Card className="overflow-hidden">
-                <CardHeader className="border-b bg-muted/30 pb-4">
-                  <CardTitle className="text-base">Quick actions</CardTitle>
-                  <p className="text-xs text-muted-foreground">Click button to navigate to the page</p>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    {quickActions.map((action) => (
-                      <Tooltip key={action.to}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-14 w-full rounded-xl border-dashed hover:border-primary/40 hover:bg-primary/5"
-                            aria-label={action.label}
-                            asChild
-                          >
-                            <Link to={action.to}>
-                              <action.icon className="h-5 w-5" />
-                            </Link>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[200px] text-center">
-                          <p className="font-medium">{action.label}</p>
-                          <p className="text-xs text-muted-foreground">{action.description}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
               <RequisitionPolicyCard />
             </div>
           </div>

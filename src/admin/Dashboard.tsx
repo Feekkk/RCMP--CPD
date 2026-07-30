@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, FileText, History, LayoutDashboard, Loader2, TrendingUp, Users } from "lucide-react";
+import { CheckCircle2, Clock, FileText, History, Loader2, TrendingUp, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -187,27 +187,6 @@ export const AdminDashboardPage = () => {
             </div>
 
             <div className="grid gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick actions</CardTitle>
-                  <CardDescription>Admin shortcuts for daily review.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <LayoutDashboard className="h-4 w-4" />
-                    View dashboard
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <FileText className="h-4 w-4" />
-                    Pending requisitions
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Users className="h-4 w-4" />
-                    User management
-                  </Button>
-                </CardContent>
-              </Card>
-
               <RequisitionPolicyCard />
             </div>
           </div>

@@ -25,7 +25,7 @@ import { formatHistoryDate, formatTodayDate, statusDetailLabel } from "@/lib/req
 import { StaffSidebar } from "@/staff/Sidebar";
 import { cn } from "@/lib/utils";
 
-const ACADEMIC_YEAR_LABEL = "Academic year 2025/2026";
+const CURRENT_YEAR_LABEL = `Year ${new Date().getFullYear()}`;
 const COMPLETED_HOURS_MOCK = 18;
 
 type TrackStatus = "off-track" | "need-attention" | "on-track";
@@ -114,7 +114,7 @@ export const StaffDashboardPage = () => {
               </CardHeader>
               <CardContent>
                 <p className="font-display text-2xl font-bold">{COMPLETED_HOURS_MOCK}h</p>
-                <p className="mt-1 text-xs text-muted-foreground">{ACADEMIC_YEAR_LABEL}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{CURRENT_YEAR_LABEL}</p>
               </CardContent>
             </Card>
 
@@ -146,7 +146,7 @@ export const StaffDashboardPage = () => {
               </CardHeader>
               <CardContent>
                 <p className={cn("font-display text-2xl font-bold", trackStatus.valueClass)}>{trackStatus.label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{ACADEMIC_YEAR_LABEL}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Complete you training to stay on track</p>
               </CardContent>
             </Card>
           </div>

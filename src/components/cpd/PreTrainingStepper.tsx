@@ -26,28 +26,33 @@ export function PreTrainingStepper({
   return (
     <ol className="flex flex-wrap items-center gap-1 sm:gap-0">
       {steps.map((step, idx) => {
-        const colors = neutralStyle ? TRAFFIC_LIGHT_STYLES.neutral : stepTrafficLight(step.state);
+        const colors = stepTrafficLight(step.state);
         return (
           <li key={step.key} className="flex items-center">
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
-                  neutralStyle ? "border-border bg-muted/40 text-muted-foreground" : colors.border,
-                  !neutralStyle && step.state === "complete" && cn(colors.dot, "text-white"),
-                  !neutralStyle && step.state === "current" && colors.bg,
+                  step.state === "complete" && cn(TRAFFIC_LIGHT_STYLES.green.dot, "border-emerald-500 text-white"),
+                  step.state === "current" &&
+                    (neutralStyle
+                      ? "border-foreground bg-muted text-foreground"
+                      : cn(colors.bg, colors.border)),
+                  step.state === "rejected" && cn(TRAFFIC_LIGHT_STYLES.red.dot, "border-red-500 text-white"),
                   step.state === "upcoming" && "border-muted-foreground/25 bg-muted/30 text-muted-foreground",
-                  !neutralStyle && step.state === "rejected" && colors.bg,
-                  neutralStyle && step.state === "complete" && "bg-foreground text-background",
-                  neutralStyle && step.state === "current" && "border-foreground bg-muted text-foreground",
                 )}
               >
                 {step.state === "complete" ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : step.state === "rejected" ? (
-                  <X className={cn("h-3.5 w-3.5", neutralStyle ? "text-muted-foreground" : colors.text)} />
+                  <X className="h-3.5 w-3.5" />
                 ) : step.state === "current" ? (
-                  <Circle className={cn("h-2 w-2 fill-current", neutralStyle ? "text-foreground" : colors.text)} />
+                  <Circle
+                    className={cn(
+                      "h-2 w-2 fill-current",
+                      neutralStyle ? "text-foreground" : TRAFFIC_LIGHT_STYLES.yellow.text,
+                    )}
+                  />
                 ) : (
                   <span>{idx + 1}</span>
                 )}
@@ -75,10 +80,10 @@ export function PreTrainingStepper({
                 className={cn(
                   "mx-2 hidden h-0.5 w-6 sm:block md:w-10",
                   step.state === "complete"
-                    ? neutralStyle
-                      ? "bg-foreground/30"
-                      : TRAFFIC_LIGHT_STYLES.green.dot
-                    : "bg-border",
+                    ? TRAFFIC_LIGHT_STYLES.green.dot
+                    : step.state === "rejected"
+                      ? TRAFFIC_LIGHT_STYLES.red.dot
+                      : "bg-border",
                 )}
               />
             ) : null}

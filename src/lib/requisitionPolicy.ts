@@ -1,6 +1,10 @@
 import { addMonths, differenceInCalendarDays, format, isAfter, parseISO, startOfDay } from "date-fns";
 
-export const REQUISITION_LEAD_TIME_MONTHS = 2;
+export const REQUISITION_LEAD_TIME_MONTHS = 1;
+
+export const LEAD_TIME_LABEL = `${REQUISITION_LEAD_TIME_MONTHS} month${REQUISITION_LEAD_TIME_MONTHS === 1 ? "" : "s"}`;
+
+export const URGENT_APPROVER = "Head of Human Capital Department";
 
 export type RequisitionDatePolicy = {
   isUrgent: boolean;
@@ -30,7 +34,7 @@ export function evaluateRequisitionDatePolicy(programmeDateStr: string): Requisi
       programmeDate,
       latestNormalSubmitDate,
       daysUntilProgramme,
-      message: `The programme date (${formattedProgrammeDate}) is in the past. This requisition will be treated as urgent and requires approval by the Dean or HR.`,
+      message: `Programme date ${formattedProgrammeDate} is in the past. This requisition is urgent and requires ${URGENT_APPROVER} approval.`,
     };
   }
 
@@ -40,7 +44,7 @@ export function evaluateRequisitionDatePolicy(programmeDateStr: string): Requisi
       programmeDate,
       latestNormalSubmitDate,
       daysUntilProgramme,
-      message: `This programme is within ${REQUISITION_LEAD_TIME_MONTHS} months (${daysUntilProgramme} day${daysUntilProgramme === 1 ? "" : "s"} away). Requisitions must normally be submitted by ${formattedDeadline}. Your request will be flagged as urgent and requires approval by the Dean or HR.`,
+      message: `Programme is ${daysUntilProgramme} day${daysUntilProgramme === 1 ? "" : "s"} away (within ${LEAD_TIME_LABEL}). Flagged as urgent — ${URGENT_APPROVER} approval required. Normal deadline was ${formattedDeadline}.`,
     };
   }
 
@@ -49,7 +53,7 @@ export function evaluateRequisitionDatePolicy(programmeDateStr: string): Requisi
     programmeDate,
     latestNormalSubmitDate,
     daysUntilProgramme,
-    message: `This programme date meets the submission policy. Submit by ${formattedDeadline} (at least ${REQUISITION_LEAD_TIME_MONTHS} months before ${formattedProgrammeDate}).`,
+    message: `On track. Submit by ${formattedDeadline} to stay within the ${LEAD_TIME_LABEL} lead-time policy.`,
   };
 }
 
@@ -87,8 +91,8 @@ export function getSchedulePolicySummary(programmeDates: string[]): SchedulePoli
       isUrgent: true,
       message:
         urgentCount === policies.length
-          ? `All ${urgentCount} programme dates are within ${REQUISITION_LEAD_TIME_MONTHS} months. Your requisition will be flagged as urgent and requires approval by the Dean or HR.`
-          : `${urgentCount} of ${policies.length} programme dates are within ${REQUISITION_LEAD_TIME_MONTHS} months. Urgent dates require approval by the Dean or HR.`,
+          ? `All ${urgentCount} programme dates fall within ${LEAD_TIME_LABEL}. This requisition is urgent and requires ${URGENT_APPROVER} approval.`
+          : `${urgentCount} of ${policies.length} dates fall within ${LEAD_TIME_LABEL}. Those dates make this requisition urgent and require ${URGENT_APPROVER} approval.`,
       policies,
     };
   }
@@ -96,23 +100,30 @@ export function getSchedulePolicySummary(programmeDates: string[]): SchedulePoli
   return {
     hasDates: true,
     isUrgent: false,
-    message: `All ${policies.length} programme dates meet the submission policy (submit at least ${REQUISITION_LEAD_TIME_MONTHS} months in advance).`,
+    message: `All ${policies.length} programme dates meet the ${LEAD_TIME_LABEL} lead-time policy.`,
     policies,
   };
 }
 
 export const REQUISITION_POLICY_RULES = [
   {
-    title: "Advance submission",
-    description: `Requisitions must be submitted at least ${REQUISITION_LEAD_TIME_MONTHS} months before the programme date.`,
+    title: "Requisition Submission",
+    description: `Submit at least ${LEAD_TIME_LABEL} before the earliest programme date.`,
   },
   {
-    title: "Urgent requisitions",
-    description:
-      "If submitted within 2 months of the programme date, the request is treated as urgent and requires approval by the Dean or HR.",
+    title: "Approval workflow",
+    description: "Submission -> Head of Department -> Human Capital Review -> Final Approval",
   },
   {
-    title: "Programme schedule",
-    description: "Enter the actual programme date in the requisition form. The system will indicate whether your submission follows policy.",
+    title: "Urgent submissions",
+    description: `Dates within ${LEAD_TIME_LABEL} (or already past) are flagged urgent and need ${URGENT_APPROVER} approval.`,
+  },
+  {
+    title: "Post-training",
+    description: "After the programme, complete attendance, e-survey, and HOD evaluation before hours are counted.",
+  },
+  {
+    title: "Annual Target",
+    description: "Staff must complete hours of approved hours each year.",
   },
 ] as const;

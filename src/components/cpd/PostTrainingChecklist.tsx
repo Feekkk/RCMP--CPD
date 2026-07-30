@@ -21,18 +21,13 @@ type PostTrainingChecklistProps = {
 };
 
 function stepStyles(done: boolean, locked: boolean, neutralStyle: boolean) {
-  if (neutralStyle) {
-    return done
-      ? { circle: "bg-foreground text-background border-border", text: "text-foreground" }
-      : { circle: "border-border bg-muted/40 text-muted-foreground", text: locked ? "text-muted-foreground" : "text-muted-foreground" };
-  }
   if (done) {
     return {
-      circle: cn(TRAFFIC_LIGHT_STYLES.green.dot, "text-white"),
-      text: TRAFFIC_LIGHT_STYLES.green.text,
+      circle: cn(TRAFFIC_LIGHT_STYLES.green.dot, "border-emerald-500 text-white"),
+      text: neutralStyle ? "text-foreground" : TRAFFIC_LIGHT_STYLES.green.text,
     };
   }
-  if (locked) {
+  if (locked || neutralStyle) {
     return {
       circle: "border-muted-foreground/25 bg-muted/30 text-muted-foreground",
       text: "text-muted-foreground",
@@ -98,8 +93,7 @@ export function PostTrainingChecklist({
                 <div
                   className={cn(
                     "mx-2 hidden h-0.5 w-6 sm:block md:w-10",
-                    done && !neutralStyle ? TRAFFIC_LIGHT_STYLES.green.dot : "bg-border",
-                    done && neutralStyle && "bg-foreground/30",
+                    done ? TRAFFIC_LIGHT_STYLES.green.dot : "bg-border",
                   )}
                 />
               ) : null}
@@ -110,8 +104,8 @@ export function PostTrainingChecklist({
 
       {allDone && postTraining.cpdPointsCounted ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Star className={cn("h-3.5 w-3.5", !neutralStyle && TRAFFIC_LIGHT_STYLES.green.text)} />
-          <span className={cn(!neutralStyle && TRAFFIC_LIGHT_STYLES.green.text, "font-medium")}>
+          <Star className={cn("h-3.5 w-3.5", TRAFFIC_LIGHT_STYLES.green.text)} />
+          <span className={cn(TRAFFIC_LIGHT_STYLES.green.text, "font-medium")}>
             CPD points recorded{postTraining.cpdPoints != null ? ` · ${postTraining.cpdPoints} pts` : ""}
           </span>
         </p>

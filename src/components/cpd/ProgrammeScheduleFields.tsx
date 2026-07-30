@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import {
   evaluateRequisitionDatePolicy,
   getSchedulePolicySummary,
-  REQUISITION_LEAD_TIME_MONTHS,
+  LEAD_TIME_LABEL,
+  URGENT_APPROVER,
 } from "@/lib/requisitionPolicy";
 import { RequiredMark } from "@/components/cpd/RequiredMark";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,7 @@ function ProgrammeSchedulePolicyBanner({ programmeDates }: { programmeDates: str
           <p className="leading-relaxed">
             {summary
               ? summary.message
-              : `Submit requisitions at least ${REQUISITION_LEAD_TIME_MONTHS} months before the programme date. Dates within that window are urgent and require Dean or HR approval.`}
+              : `Submit at least ${LEAD_TIME_LABEL} before the programme date. Closer dates are urgent and need ${URGENT_APPROVER} approval.`}
           </p>
         </div>
       </div>

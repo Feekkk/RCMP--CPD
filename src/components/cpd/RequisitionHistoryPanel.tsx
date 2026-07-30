@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   Clock,
   FilePen,
-  FileText,
   Loader2,
   XCircle,
 } from "lucide-react";
@@ -17,7 +16,6 @@ import { RequisitionHistoryCard } from "@/components/cpd/RequisitionHistoryCard"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchRequisitionHistory } from "@/lib/requisitionsApi";
 import {
   type HistoryPhaseFilter,
@@ -28,13 +26,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const PHASE_TABS: {
-  value: HistoryPhaseFilter;
+  value: Exclude<HistoryPhaseFilter, "all">;
   label: string;
   hint?: string;
-  summaryKey: keyof import("@/lib/requisitionsApi").RequisitionHistorySummary | "all";
+  summaryKey: keyof import("@/lib/requisitionsApi").RequisitionHistorySummary;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-    { value: "all", label: "All", summaryKey: "all", icon: FileText },
     { value: "draft", label: "Drafts", hint: "Saved but not submitted yet", summaryKey: "draft", icon: FilePen },
     {
       value: "pre_training",
@@ -136,8 +133,8 @@ export function RequisitionHistoryPanel({
 
       {summary ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {PHASE_TABS.filter((t) => t.value !== "all").map((tab) => {
-            const count = summary[tab.summaryKey as keyof typeof summary] ?? 0;
+          {PHASE_TABS.map((tab) => {
+            const count = summary[tab.summaryKey] ?? 0;
             const Icon = tab.icon;
             const active = phaseFilter === tab.value;
             const light = phaseFilterTrafficLight(tab.value);
@@ -147,7 +144,7 @@ export function RequisitionHistoryPanel({
               <button
                 key={tab.value}
                 type="button"
-                onClick={() => setPhaseFilter(tab.value)}
+                onClick={() => setPhaseFilter(active ? "all" : tab.value)}
                 className={cn(
                   "rounded-xl border p-4 text-left transition-colors",
                   active ? styles.summaryActive : styles.summaryIdle,
@@ -176,41 +173,6 @@ export function RequisitionHistoryPanel({
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <Tabs value={phaseFilter} onValueChange={(v) => setPhaseFilter(v as HistoryPhaseFilter)}>
-            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40">
-              {PHASE_TABS.map((tab) => {
-                const light = phaseFilterTrafficLight(tab.value);
-                const styles = stylesFor(light);
-                return (
-                  <TabsTrigger
-                    key={tab.value}
-                    value={tab.value}
-                    className={cn("gap-1.5 text-xs sm:text-sm", !neutralStyle && styles.tabActive)}
-                  >
-                    {!neutralStyle ? (
-                      <span className={cn("h-2 w-2 rounded-full", styles.dot)} aria-hidden />
-                    ) : null}
-                    {tab.label}
-                    {summary && tab.summaryKey !== "all" ? (
-                      <span
-                        className={cn(
-                          "ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                          neutralStyle ? "bg-muted text-muted-foreground" : cn(styles.bg, styles.text),
-                        )}
-                      >
-                        {summary[tab.summaryKey as keyof typeof summary]}
-                      </span>
-                    ) : summary && tab.value === "all" ? (
-                      <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
-                        {summary.all}
-                      </span>
-                    ) : null}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
-
           {activePhaseHint ? (
             <p
               className={cn(

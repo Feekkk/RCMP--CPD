@@ -316,7 +316,7 @@ export type PreTrainingStep = {
 export function preTrainingSteps(status: string): PreTrainingStep[] {
   const steps = [
     { key: "submitted", label: "Submitted" },
-    { key: "hod", label: "HOD review" },
+    { key: "hod", label: "HOD recommend" },
     { key: "hr", label: "HR verify" },
     { key: "dean", label: "Approval" },
   ] as const;

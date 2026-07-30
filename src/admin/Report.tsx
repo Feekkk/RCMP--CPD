@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminSidebar } from "@/admin/Sidebar";
-import { buildExecutiveSnapshot } from "@/lib/reportSnapshot";
 import { fetchAdminReportStats } from "@/lib/requisitionsApi";
 
 const reportMonth = new Date().toLocaleDateString("en-MY", { month: "long", year: "numeric" });
@@ -71,16 +70,6 @@ export function AdminReportPage() {
     monthlyTrend[0] ?? { month: "", hours: 0 },
   );
 
-  const snapshot = buildExecutiveSnapshot({
-    totalStaff,
-    compliantStaff,
-    complianceRate,
-    approvalRate,
-    submittedClaims,
-    totalHours,
-    departments: allDepartments.length ? allDepartments : topDepartments,
-  });
-
   const summaryCards = [
     {
       label: "CPD compliant staff",
@@ -131,28 +120,7 @@ export function AdminReportPage() {
         </header>
 
         <div className="container mx-auto py-8">
-          <Card className="border-primary/20 bg-gradient-to-r from-primary/10 via-background to-background">
-            <CardContent className="p-6">
-              <div className="max-w-2xl space-y-3">
-                <Badge variant="secondary" className="w-fit">
-                  Monthly executive snapshot
-                </Badge>
-                {isReportLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Preparing snapshot…
-                  </div>
-                ) : (
-                  <div>
-                    <h2 className="font-display text-3xl font-bold tracking-tight">{snapshot.headline}</h2>
-                    <p className="mt-2 text-sm text-muted-foreground">{snapshot.detail}</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map((card, index) => (
               <InsightStatCard
                 key={card.label}
@@ -167,156 +135,75 @@ export function AdminReportPage() {
             ))}
           </div>
 
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Average hours attended</CardTitle>
-              <CardDescription>CPD hours logged per staff member, split by Academic and Services divisions.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-xl border p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Academic division</p>
-                      <p className="font-display text-3xl font-bold">
-                        {isReportLoading ? (
-                          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
-                        ) : (
-                          `${academicDivision.totalHours}h`
-                        )}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{academicDivision.staffCount} staff</Badge>
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {academicDivision.averageHours}h average per staff member.
-                  </p>
-                </div>
-                <div className="rounded-xl border p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Services division</p>
-                      <p className="font-display text-3xl font-bold">
-                        {isReportLoading ? (
-                          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
-                        ) : (
-                          `${servicesDivision.totalHours}h`
-                        )}
-                      </p>
-                    </div>
-                    <Badge variant="outline">{servicesDivision.staffCount} staff</Badge>
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {servicesDivision.averageHours}h average per staff member.
-                  </p>
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border bg-card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Academic avg</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${academicDivision.averageHours}h`}
-                  </p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Services avg</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${servicesDivision.averageHours}h`}
-                  </p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Overall avg</p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {isReportLoading ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                    ) : (
-                      `${totalStaff ? Math.round((totalHours / totalStaff) * 10) / 10 : 0}h`
-                    )}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           <div className="mt-6 grid gap-4 xl:grid-cols-5">
             <Card className="xl:col-span-3">
-              <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1.5">
-                  <CardTitle>Department performance</CardTitle>
-                  <CardDescription>
-                    {isDepartmentSearchActive
-                      ? `Showing ${visibleDepartments.length} matching department${visibleDepartments.length === 1 ? "" : "s"} from all units.`
-                      : "Top 5 departments by CPD completion rate. Search to view any other department."}
-                  </CardDescription>
-                </div>
-                <div className="relative w-full sm:max-w-xs">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={departmentSearch}
-                    onChange={(e) => setDepartmentSearch(e.target.value)}
-                    placeholder="Search department…"
-                    className="pl-9"
-                  />
-                </div>
+              <CardHeader>
+                <CardTitle>Average hours attended</CardTitle>
+                <CardDescription>CPD hours logged per staff member, split by Academic and Services divisions.</CardDescription>
               </CardHeader>
-              <CardContent>
-                {isReportLoading ? (
-                  <div className="flex justify-center py-12">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : allDepartments.length === 0 && topDepartments.length === 0 ? (
-                  <div className="rounded-lg border border-dashed py-12 text-center">
-                    <p className="font-medium text-foreground">No department data yet</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Departments will appear once staff log CPD hours.</p>
-                  </div>
-                ) : visibleDepartments.length === 0 ? (
-                  <div className="rounded-lg border border-dashed py-12 text-center">
-                    <p className="font-medium text-foreground">No departments match</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Try another name for &ldquo;{departmentSearch.trim()}&rdquo;.
+              <CardContent className="grid gap-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Academic division</p>
+                        <p className="font-display text-3xl font-bold">
+                          {isReportLoading ? (
+                            <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                          ) : (
+                            `${academicDivision.totalHours}h`
+                          )}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{academicDivision.staffCount} staff</Badge>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {academicDivision.averageHours}h average per staff member.
                     </p>
                   </div>
-                ) : (
-                  <div className="rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Department</TableHead>
-                          <TableHead className="hidden md:table-cell">Staff</TableHead>
-                          <TableHead>Completion</TableHead>
-                          <TableHead className="hidden md:table-cell">Avg hours</TableHead>
-                          <TableHead className="text-right">Risk</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {visibleDepartments.map((row) => (
-                          <TableRow key={row.departmentId}>
-                            <TableCell className="font-medium">{row.departmentName}</TableCell>
-                            <TableCell className="hidden md:table-cell">{row.staffCount}</TableCell>
-                            <TableCell>
-                              <div className="min-w-[140px] space-y-2">
-                                <div className="flex items-center justify-between gap-3 text-sm">
-                                  <span>{row.completion}%</span>
-                                  <span className="text-muted-foreground">{row.staffCount} staff</span>
-                                </div>
-                                <Progress value={row.completion} />
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">{row.avgHours}h</TableCell>
-                            <TableCell className="text-right">
-                              <Badge
-                                variant={row.risk === "High" ? "destructive" : "outline"}
-                                className={departmentRiskBadgeClass(row.risk)}
-                              >
-                                {row.risk}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="rounded-xl border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Services division</p>
+                        <p className="font-display text-3xl font-bold">
+                          {isReportLoading ? (
+                            <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                          ) : (
+                            `${servicesDivision.totalHours}h`
+                          )}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{servicesDivision.staffCount} staff</Badge>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {servicesDivision.averageHours}h average per staff member.
+                    </p>
                   </div>
-                )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border bg-card p-4">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Academic avg</p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${academicDivision.averageHours}h`}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-card p-4">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Services avg</p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {isReportLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : `${servicesDivision.averageHours}h`}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border bg-card p-4">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Overall avg</p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {isReportLoading ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      ) : (
+                        `${totalStaff ? Math.round((totalHours / totalStaff) * 10) / 10 : 0}h`
+                      )}
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -359,6 +246,87 @@ export function AdminReportPage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card className="mt-6">
+            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1.5">
+                <CardTitle>Department performance</CardTitle>
+                <CardDescription>
+                  {isDepartmentSearchActive
+                    ? `Showing ${visibleDepartments.length} matching department${visibleDepartments.length === 1 ? "" : "s"} from all units.`
+                    : "Top 5 departments by CPD completion rate. Search to view any other department."}
+                </CardDescription>
+              </div>
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={departmentSearch}
+                  onChange={(e) => setDepartmentSearch(e.target.value)}
+                  placeholder="Search department…"
+                  className="pl-9"
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isReportLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : allDepartments.length === 0 && topDepartments.length === 0 ? (
+                <div className="rounded-lg border border-dashed py-12 text-center">
+                  <p className="font-medium text-foreground">No department data yet</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Departments will appear once staff log CPD hours.</p>
+                </div>
+              ) : visibleDepartments.length === 0 ? (
+                <div className="rounded-lg border border-dashed py-12 text-center">
+                  <p className="font-medium text-foreground">No departments match</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Try another name for &ldquo;{departmentSearch.trim()}&rdquo;.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Department</TableHead>
+                        <TableHead className="hidden md:table-cell">Staff</TableHead>
+                        <TableHead>Completion</TableHead>
+                        <TableHead className="hidden md:table-cell">Avg hours</TableHead>
+                        <TableHead className="text-right">Risk</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleDepartments.map((row) => (
+                        <TableRow key={row.departmentId}>
+                          <TableCell className="font-medium">{row.departmentName}</TableCell>
+                          <TableCell className="hidden md:table-cell">{row.staffCount}</TableCell>
+                          <TableCell>
+                            <div className="min-w-[140px] space-y-2">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <span>{row.completion}%</span>
+                                <span className="text-muted-foreground">{row.staffCount} staff</span>
+                              </div>
+                              <Progress value={row.completion} />
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{row.avgHours}h</TableCell>
+                          <TableCell className="text-right">
+                            <Badge
+                              variant={row.risk === "High" ? "destructive" : "outline"}
+                              className={departmentRiskBadgeClass(row.risk)}
+                            >
+                              {row.risk}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </main>

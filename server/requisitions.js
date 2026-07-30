@@ -6,11 +6,17 @@ import multer from "multer";
 import { requireAuth } from "./auth/requireAuth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, "..", "uploads", "requisitions");
-const postTrainingUploadsDir = path.join(__dirname, "..", "uploads", "post-training");
+const uploadsRoot = path.resolve(path.join(__dirname, "..", "uploads"));
 
-fs.mkdirSync(uploadsDir, { recursive: true });
-fs.mkdirSync(postTrainingUploadsDir, { recursive: true });
+function currentUploadYear() {
+  return String(new Date().getFullYear());
+}
+
+function ensureYearUploadDir(category) {
+  const dir = path.join(uploadsRoot, currentUploadYear(), category);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 const STATUS_SAVE_DRAFT = 1;
 const STATUS_SUBMITTED = 2;
@@ -331,11 +337,15 @@ function mapHodReviewRow(row) {
 }
 
 function resolveUploadPath(relativePath) {
-  const uploadsRoot = path.resolve(path.join(__dirname, "..", "uploads", "requisitions"));
   const resolved = path.resolve(path.join(__dirname, "..", String(relativePath ?? "")));
-  if (!resolved.startsWith(uploadsRoot)) {
+  if (resolved !== uploadsRoot && !resolved.startsWith(uploadsRoot + path.sep)) {
     return null;
   }
+  const relative = path.relative(uploadsRoot, resolved);
+  const parts = relative.split(path.sep);
+  const isLegacy = parts[0] === "requisitions";
+  const isYearBased = parts.length >= 2 && /^\d{4}$/.test(parts[0]) && parts[1] === "requisitions";
+  if (!isLegacy && !isYearBased) return null;
   return resolved;
 }
 
@@ -1893,7 +1903,13 @@ async function queryRequisitionAuditLogs(pool, { user, page, pageSize }) {
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    destination: (_req, _file, cb) => {
+      try {
+        cb(null, ensureYearUploadDir("requisitions"));
+      } catch (err) {
+        cb(err);
+      }
+    },
     filename: (_req, file, cb) => {
       const safe = String(file.originalname ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_");
       cb(null, `${Date.now()}-${safe}`);
@@ -1914,7 +1930,13 @@ const upload = multer({
 
 const postTrainingUpload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, postTrainingUploadsDir),
+    destination: (_req, _file, cb) => {
+      try {
+        cb(null, ensureYearUploadDir("post-training"));
+      } catch (err) {
+        cb(err);
+      }
+    },
     filename: (req, file, cb) => {
       const requisitionId = parsePositiveInt(req.params.requisitionId) ?? "unknown";
       const ext = path.extname(file.originalname ?? "").toLowerCase() || ".bin";
@@ -2010,8 +2032,13 @@ function mapRequisitionDbError(err) {
   return { status: 500, error: "Unable to save requisition. Try again later." };
 }
 
+function toPosixPath(filePath) {
+  return String(filePath ?? "").split(path.sep).join("/");
+}
+
 function documentPathsFromFiles(files) {
-  return (files ?? []).slice(0, 3).map((file) => path.join("uploads", "requisitions", file.filename));
+  const projectRoot = path.join(__dirname, "..");
+  return (files ?? []).slice(0, 3).map((file) => toPosixPath(path.relative(projectRoot, file.path)));
 }
 
 function existingDocumentPaths(row) {
@@ -2595,7 +2622,7 @@ async function submitPostTrainingAttendance(pool, { requisitionId, staffId, file
   }
   if (!file) return { status: 400, error: "Attendance file is required." };
 
-  const relativePath = path.join("post-training", path.basename(file.path));
+  const relativePath = toPosixPath(path.relative(uploadsRoot, file.path));
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -2630,9 +2657,13 @@ async function fetchStaffAttendanceFilePath(pool, requisitionId, staffId) {
   );
   const attendancePath = rows[0]?.attendance_path;
   if (!attendancePath) return null;
-  const uploadsRoot = path.resolve(path.join(__dirname, "..", "uploads"));
   const resolved = path.resolve(uploadsRoot, String(attendancePath));
   if (!resolved.startsWith(uploadsRoot + path.sep)) return null;
+  const relative = path.relative(uploadsRoot, resolved);
+  const parts = relative.split(path.sep);
+  const isLegacy = parts[0] === "post-training";
+  const isYearBased = parts.length >= 2 && /^\d{4}$/.test(parts[0]) && parts[1] === "post-training";
+  if (!isLegacy && !isYearBased) return null;
   return resolved;
 }
 

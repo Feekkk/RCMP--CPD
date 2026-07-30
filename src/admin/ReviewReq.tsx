@@ -471,7 +471,7 @@ export function AdminVerifyRequisitionPage() {
             <CardHeader>
               <CardTitle>Awaiting verification</CardTitle>
               <CardDescription>
-                Requisitions recommended by HOD and pending admin verification before dean approval.
+                Requisitions recommended by HOD and pending admin verification before approval.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">

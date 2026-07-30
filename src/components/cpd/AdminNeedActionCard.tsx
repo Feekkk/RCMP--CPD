@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fetchAdminVerifyQueue } from "@/lib/requisitionsApi";
 import { cn } from "@/lib/utils";
 
-export function AdminNeedActionCard() {
+export function AdminNeedActionCard({ className }: { className?: string }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["requisitions", "admin", "verify-queue", "need-action"],
     queryFn: fetchAdminVerifyQueue,
@@ -17,7 +17,7 @@ export function AdminNeedActionCard() {
   const awaitingVerification = data?.summary.total ?? 0;
 
   return (
-    <Card>
+    <Card className={cn("flex flex-col", className)}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
           <CardTitle>Need Action</CardTitle>
@@ -29,7 +29,7 @@ export function AdminNeedActionCard() {
           <Link to="/admin/verify-requisition">See more</Link>
         </Button>
       </CardHeader>
-      <CardContent className="grid gap-4">
+      <CardContent className="grid flex-1 content-start gap-4">
         {isError ? (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -39,14 +39,16 @@ export function AdminNeedActionCard() {
         ) : null}
 
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
             Checking verification queue…
           </div>
         ) : awaitingVerification === 0 ? (
-          <div className="rounded-lg border border-dashed py-12 text-center">
-            <p className="font-medium text-foreground">You&apos;re all caught up</p>
-            <p className="mt-1 text-sm text-muted-foreground">No requisitions need verification right now.</p>
+          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed py-12 text-center">
+            <div>
+              <p className="font-medium text-foreground">You&apos;re all caught up</p>
+              <p className="mt-1 text-sm text-muted-foreground">No requisitions need verification right now.</p>
+            </div>
           </div>
         ) : (
           <div

@@ -1,53 +1,70 @@
-import { ClipboardCheck, ShieldCheck, Target } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
-const PILLARS = [
-  {
-    icon: Target,
-    label: "Plan",
-    description: "Set and track your annual 40-hour CPD target.",
-  },
-  {
-    icon: ClipboardCheck,
-    label: "Submit",
-    description: "Requisition programmes through a structured approval workflow.",
-  },
-  {
-    icon: ShieldCheck,
-    label: "Verify",
-    description: "HOD, HR, and management review every submission.",
-  },
+const BADGES = [
+  { label: "Plan", color: "bg-secondary" },
+  { label: "Submit", color: "bg-primary" },
+  { label: "Verify", color: "bg-secondary" },
 ];
 
 export const Hero = () => {
   return (
-    <section className="relative overflow-hidden border-b bg-background pt-28 pb-16 sm:pt-36 sm:pb-20">
-      <div className="container relative mx-auto">
-        <div className="mx-auto max-w-3xl text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-1.5 text-xs font-semibold tracking-wide text-foreground/80">
-            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            Human Capital Department
+    <section className="relative flex min-h-[100svh] flex-col overflow-hidden bg-background">
+      <div className="container relative mx-auto flex flex-1 flex-col pt-28 sm:pt-32 lg:pt-36">
+        <div className="flex flex-1 flex-col justify-center py-10 sm:py-14 lg:py-0">
+          <div className="max-w-4xl text-left">
+            <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground sm:text-xs">
+              <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-secondary" />
+              Human Capital Department Portal
+            </p>
+
+            <h1 className="mt-5 font-display text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:mt-6 sm:text-5xl md:text-6xl lg:text-7xl xl:text-[5.25rem]">
+              Empowering Excellence
+              <br />
+              <span className="text-secondary">Through Training.</span>
+            </h1>
+
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:mt-7 sm:text-lg lg:text-xl">
+              The official platform for UniKL RCMP staff to plan, submit, and track Continuous
+              Professional Development requisitions and annual training hours.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
+              <Button
+                size="lg"
+                className="h-12 rounded-full bg-secondary px-7 text-base font-semibold text-white shadow-none hover:bg-secondary/90 sm:px-8"
+                asChild
+              >
+                <Link to="/login">Staff Login</Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="secondary"
+                className="h-12 rounded-full bg-muted px-7 text-base font-semibold text-foreground shadow-none hover:bg-muted/80 sm:px-8"
+                asChild
+              >
+                <a href="#faq">Help / FAQ</a>
+              </Button>
+            </div>
+
+            <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80 sm:mt-6 sm:text-xs">
+              Plan · Submit · Verify 
+            </p>
           </div>
-
-          <h1 className="mt-6 font-display text-4xl font-bold leading-[1.15] tracking-tight text-foreground sm:text-5xl lg:text-[3.25rem]">
-            Empowering Excellence <span className="text-primary">Through Training</span>
-          </h1>
-
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            The official platform for UniKL RCMP staff to plan, submit, and track Continuous
-            Professional Development requisitions and annual training hours.
-          </p>
         </div>
 
-        <div className="mx-auto mt-14 grid max-w-4xl gap-4 sm:grid-cols-3">
-          {PILLARS.map((pillar) => (
-            <div key={pillar.label} className="rounded-xl border bg-card p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <pillar.icon className="h-5 w-5" />
-              </div>
-              <p className="mt-4 font-display text-base font-semibold text-foreground">{pillar.label}</p>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{pillar.description}</p>
-            </div>
-          ))}
+        <div className="mt-auto border-y border-border/70 py-5 sm:py-6">
+          <ul className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 lg:gap-x-12">
+            {BADGES.map((badge) => (
+              <li
+                key={badge.label}
+                className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground sm:text-xs"
+              >
+                <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${badge.color}`} />
+                {badge.label}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

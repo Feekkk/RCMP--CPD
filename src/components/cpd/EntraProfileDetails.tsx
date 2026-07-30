@@ -86,7 +86,6 @@ export function EntraProfileDetails({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Entra ID</TableHead>
               <TableHead>Full Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead className="hidden lg:table-cell">Office Location</TableHead>
@@ -94,14 +93,6 @@ export function EntraProfileDetails({
           </TableHeader>
           <TableBody>
             <TableRow>
-              <TableCell className="max-w-[12rem] sm:max-w-none">
-                <FieldValue
-                  value={profile?.oid}
-                  pending={pending}
-                  className="break-all font-mono text-xs sm:text-sm"
-                  skeletonClassName="h-4 w-36"
-                />
-              </TableCell>
               <TableCell>
                 <FieldValue value={profile?.name} pending={pending} className="font-medium" skeletonClassName="h-4 w-32" />
               </TableCell>

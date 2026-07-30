@@ -1029,6 +1029,257 @@ async function queryAdminVerifyDetail(pool, requisitionId) {
   return mapAdminVerifyRow(row);
 }
 
+const ADMIN_CLAIM_SELECT = `
+  SELECT r.id, r.title, r.category, r.venue, r.created_at,
+         rs.details AS status,
+         s.email AS staff_email,
+         d.department_name,
+         b.mileage, b.accommodation, b.travel_fare, b.others,
+         rd.date_1, rd.time_1, rd.time_to_1,
+         rd.date_2, rd.time_2, rd.time_to_2,
+         rd.date_3, rd.time_3, rd.time_to_3,
+         rd.date_4, rd.time_4, rd.time_to_4,
+         rd.date_5, rd.time_5, rd.time_to_5,
+         pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled, pt.cpd_points_counted,
+         pt.actual_mileage, pt.actual_accommodation, pt.actual_travel_fare, pt.actual_others,
+         pt.claim_notes, pt.claim_attachment_path, pt.claim_recorded_at,
+         claim_admin.email AS claim_admin_email
+  FROM requisitions r
+  INNER JOIN requisition_status rs ON rs.id = r.status_id
+  INNER JOIN staff s ON s.id = r.submitted_by
+  INNER JOIN department_table d ON d.department_id = s.department_id
+  INNER JOIN budget b ON b.id_budget = r.id_budget
+  INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+  LEFT JOIN post_training pt ON pt.requisition_id = r.id
+  LEFT JOIN staff claim_admin ON claim_admin.id = pt.claim_recorded_by
+`;
+
+function mapAdminClaimRow(row) {
+  const mileage = Number(row.mileage ?? 0);
+  const accommodation = Number(row.accommodation ?? 0);
+  const travelFare = Number(row.travel_fare ?? 0);
+  const others = Number(row.others ?? 0);
+  const staffClaimTotal = mileage + accommodation + travelFare + others;
+
+  const hasActualClaim = row.claim_recorded_at != null;
+  const actualMileage = Number(row.actual_mileage ?? 0);
+  const actualAccommodation = Number(row.actual_accommodation ?? 0);
+  const actualTravelFare = Number(row.actual_travel_fare ?? 0);
+  const actualOthers = Number(row.actual_others ?? 0);
+  const actualTotal = actualMileage + actualAccommodation + actualTravelFare + actualOthers;
+  const claimAttachmentPath = row.claim_attachment_path ? String(row.claim_attachment_path) : null;
+
+  return {
+    requisitionId: row.id,
+    id: `REQ-${String(row.id).padStart(4, "0")}`,
+    title: row.title,
+    category: row.category,
+    venue: row.venue ?? "",
+    staffName: displayNameFromEmail(row.staff_email),
+    staffEmail: row.staff_email,
+    departmentName: row.department_name ?? null,
+    programmeDates: collectProgrammeDates(row),
+    submittedAt: row.created_at,
+    staffClaim: { mileage, accommodation, travelFare, others, total: staffClaimTotal },
+    actualClaim: hasActualClaim
+      ? {
+          mileage: actualMileage,
+          accommodation: actualAccommodation,
+          travelFare: actualTravelFare,
+          others: actualOthers,
+          total: actualTotal,
+          notes: row.claim_notes ?? null,
+          attachmentFileName: claimAttachmentPath ? path.basename(claimAttachmentPath) : null,
+          attachmentUrl: claimAttachmentPath
+            ? `/api/requisitions/${row.id}/admin-claim/attachment`
+            : null,
+          recordedAt: row.claim_recorded_at,
+          recordedBy: row.claim_admin_email ? displayNameFromEmail(row.claim_admin_email) : null,
+        }
+      : null,
+    claimed: hasActualClaim,
+  };
+}
+
+async function queryAdminClaimQueue(pool) {
+  const [rows] = await pool.execute(
+    `${ADMIN_CLAIM_SELECT}
+     WHERE rs.details = 'approved'
+       AND (${WORKFLOW_PHASE_SQL}) IN ('post_training', 'completed')
+       AND pt.claim_recorded_at IS NULL
+     ORDER BY GREATEST(
+       IFNULL(rd.date_1, '0000-01-01'),
+       IFNULL(rd.date_2, '0000-01-01'),
+       IFNULL(rd.date_3, '0000-01-01'),
+       IFNULL(rd.date_4, '0000-01-01'),
+       IFNULL(rd.date_5, '0000-01-01')
+     ) DESC`,
+  );
+
+  const items = rows.map(mapAdminClaimRow);
+
+  return {
+    requisitions: items,
+    summary: {
+      total: items.length,
+      pending: items.length,
+      claimed: 0,
+    },
+  };
+}
+
+async function queryAdminClaimHistory(pool, monthKey = null) {
+  const params = [];
+  let monthClause = "";
+  if (monthKey) {
+    monthClause = " AND DATE_FORMAT(pt.claim_recorded_at, '%Y-%m') = ?";
+    params.push(monthKey);
+  }
+
+  const [rows] = await pool.execute(
+    `${ADMIN_CLAIM_SELECT}
+     WHERE rs.details = 'approved'
+       AND (${WORKFLOW_PHASE_SQL}) IN ('post_training', 'completed')
+       AND pt.claim_recorded_at IS NOT NULL
+       ${monthClause}
+     ORDER BY pt.claim_recorded_at DESC`,
+    params,
+  );
+
+  const items = rows.map(mapAdminClaimRow);
+
+  return {
+    requisitions: items,
+    summary: {
+      total: items.length,
+      month: monthKey,
+    },
+  };
+}
+
+function assertClaimEligible(row) {
+  if (!row) return { error: "Requisition not found.", status: 404 };
+  const phase = deriveWorkflowPhase(row.status, row);
+  if (row.status !== "approved" || (phase !== "post_training" && phase !== "completed")) {
+    return { error: "Claim can only be recorded once the training has taken place (post-training).", status: 400 };
+  }
+  return null;
+}
+
+async function queryAdminClaimDetail(pool, requisitionId) {
+  const [rows] = await pool.execute(`${ADMIN_CLAIM_SELECT} WHERE r.id = ? LIMIT 1`, [requisitionId]);
+  const row = rows[0];
+  const invalid = assertClaimEligible(row);
+  if (invalid) return invalid;
+  return { item: mapAdminClaimRow(row) };
+}
+
+async function fetchAdminClaimAttachmentPath(pool, requisitionId) {
+  const [rows] = await pool.execute(
+    `SELECT pt.claim_attachment_path, rs.details AS status,
+            rd.date_1, rd.date_2, rd.date_3, rd.date_4, rd.date_5,
+            pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled, pt.cpd_points_counted
+     FROM post_training pt
+     INNER JOIN requisitions r ON r.id = pt.requisition_id
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+     WHERE pt.requisition_id = ? AND pt.claim_attachment_path IS NOT NULL`,
+    [requisitionId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const invalid = assertClaimEligible(row);
+  if (invalid) return null;
+
+  const resolved = path.resolve(uploadsRoot, String(row.claim_attachment_path));
+  if (!resolved.startsWith(uploadsRoot + path.sep)) return null;
+  const relative = path.relative(uploadsRoot, resolved);
+  const parts = relative.split(path.sep);
+  const isYearBased = parts.length >= 2 && /^\d{4}$/.test(parts[0]) && parts[1] === "claims";
+  if (!isYearBased) return null;
+  return resolved;
+}
+
+async function adminUpdateClaim(pool, { requisitionId, adminStaffId, mileage, accommodation, travelFare, others, notes, file }) {
+  const [rows] = await pool.execute(
+    `SELECT r.id, rs.details AS status,
+            rd.date_1, rd.date_2, rd.date_3, rd.date_4, rd.date_5,
+            pt.attendance_attached, pt.e_survey_filled, pt.hod_evaluation_filled, pt.cpd_points_counted,
+            pt.claim_attachment_path, pt.claim_recorded_at
+     FROM requisitions r
+     INNER JOIN requisition_status rs ON rs.id = r.status_id
+     INNER JOIN requisition_date rd ON rd.id_date = r.id_date
+     LEFT JOIN post_training pt ON pt.requisition_id = r.id
+     WHERE r.id = ?
+     LIMIT 1`,
+    [requisitionId],
+  );
+  const row = rows[0];
+  const invalid = assertClaimEligible(row);
+  if (invalid) return invalid;
+
+  if (row.claim_recorded_at != null) {
+    return { error: "Actual claim has already been recorded and cannot be edited.", status: 400 };
+  }
+
+  const trimmedNotes = trimOrEmpty(notes);
+  if (trimmedNotes.length > 500) {
+    return { error: "Notes must be 500 characters or fewer.", status: 400 };
+  }
+
+  const previousAttachmentPath = row.claim_attachment_path ? String(row.claim_attachment_path) : null;
+  const newAttachmentPath = file ? toPosixPath(path.relative(uploadsRoot, file.path)) : null;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await ensurePostTrainingRow(conn, requisitionId);
+    if (newAttachmentPath) {
+      await conn.execute(
+        `UPDATE post_training
+         SET actual_mileage = ?, actual_accommodation = ?, actual_travel_fare = ?, actual_others = ?,
+             claim_notes = ?, claim_attachment_path = ?, claim_recorded_at = NOW(), claim_recorded_by = ?
+         WHERE requisition_id = ?`,
+        [mileage, accommodation, travelFare, others, trimmedNotes || null, newAttachmentPath, adminStaffId, requisitionId],
+      );
+    } else {
+      await conn.execute(
+        `UPDATE post_training
+         SET actual_mileage = ?, actual_accommodation = ?, actual_travel_fare = ?, actual_others = ?,
+             claim_notes = ?, claim_recorded_at = NOW(), claim_recorded_by = ?
+         WHERE requisition_id = ?`,
+        [mileage, accommodation, travelFare, others, trimmedNotes || null, adminStaffId, requisitionId],
+      );
+    }
+    await conn.commit();
+
+    if (newAttachmentPath && previousAttachmentPath && previousAttachmentPath !== newAttachmentPath) {
+      const oldResolved = path.resolve(uploadsRoot, previousAttachmentPath);
+      if (oldResolved.startsWith(uploadsRoot + path.sep)) {
+        try {
+          fs.unlinkSync(oldResolved);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    return { requisitionId };
+  } catch (err) {
+    await conn.rollback();
+    if (file) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        /* ignore */
+      }
+    }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 async function fetchAdminRequisitionDocumentPath(pool, requisitionId, slotIndex) {
   if (slotIndex < 0 || slotIndex > 2) return null;
 
@@ -1957,6 +2208,35 @@ const postTrainingUpload = multer({
   },
 });
 
+const claimUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      try {
+        cb(null, ensureYearUploadDir("claims"));
+      } catch (err) {
+        cb(err);
+      }
+    },
+    filename: (req, file, cb) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId) ?? "unknown";
+      const ext = path.extname(file.originalname ?? "").toLowerCase() || ".bin";
+      const safeExt = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? ext : ".bin";
+      cb(null, `req-${requisitionId}-claim-${Date.now()}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname ?? "").toLowerCase();
+    const allowedExt = new Set([".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+    const mime = String(file.mimetype ?? "");
+    if (allowedExt.has(ext) || mime.startsWith("image/") || mime === "application/pdf") {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Only PDF and image files are allowed."));
+  },
+});
+
 function parseDecimal(value) {
   if (value === undefined || value === null || String(value).trim() === "") return 0;
   const n = Number.parseFloat(String(value).trim());
@@ -2014,6 +2294,12 @@ function mapRequisitionDbError(err) {
     return {
       status: 503,
       error: "Database requisition_date table is outdated. Run db/migrations/add_requisition_times.sql.",
+    };
+  }
+  if (code === "ER_BAD_FIELD_ERROR" && (message.includes("actual_") || message.includes("claim_"))) {
+    return {
+      status: 503,
+      error: "Database post_training table is outdated. Run db/migrations/add_post_training_claims.sql.",
     };
   }
   if (code === "ER_NO_SUCH_TABLE") {
@@ -3220,6 +3506,145 @@ function deriveCpdTrackStatus(completedHours, activeRequisitions = 0) {
       return res.status(mapped.status).json({ error: mapped.error });
     }
   });
+
+  apiRouter.get("/requisitions/admin/claim-queue", generalLimiter, requireAdmin, async (req, res) => {
+    try {
+      const result = await queryAdminClaimQueue(pool);
+      return res.json(result);
+    } catch (err) {
+      console.error("Admin claim queue error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/admin/claim-history", generalLimiter, requireAdmin, async (req, res) => {
+    try {
+      const monthRaw = String(req.query.month ?? "").trim();
+      const monthKey = /^\d{4}-\d{2}$/.test(monthRaw) ? monthRaw : null;
+      if (monthRaw && !monthKey) {
+        return res.status(400).json({ error: "Invalid month. Use YYYY-MM format." });
+      }
+
+      const result = await queryAdminClaimHistory(pool, monthKey);
+      return res.json(result);
+    } catch (err) {
+      console.error("Admin claim history error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.get("/requisitions/:requisitionId/admin-claim", generalLimiter, requireAdmin, async (req, res) => {
+    const requisitionId = parsePositiveInt(req.params.requisitionId);
+    if (!requisitionId) {
+      return res.status(400).json({ error: "Invalid requisition ID." });
+    }
+
+    try {
+      const result = await queryAdminClaimDetail(pool, requisitionId);
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+      return res.json(result.item);
+    } catch (err) {
+      console.error("Admin claim detail error:", err);
+      const mapped = mapRequisitionDbError(err);
+      return res.status(mapped.status).json({ error: mapped.error });
+    }
+  });
+
+  apiRouter.post(
+    "/requisitions/:requisitionId/admin-claim",
+    generalLimiter,
+    requireAdmin,
+    (req, res, next) => {
+      claimUpload.single("attachment")(req, res, (err) => {
+        if (err) {
+          console.error("Admin claim upload error:", err);
+          const mapped = mapRequisitionDbError(err);
+          return res.status(mapped.status).json({ error: mapped.error });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        if (req.file) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch {
+            /* ignore */
+          }
+        }
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      const mileage = parseDecimal(req.body?.actualMileage);
+      const accommodation = parseDecimal(req.body?.actualAccommodation);
+      const travelFare = parseDecimal(req.body?.actualTravelFare);
+      const others = parseDecimal(req.body?.actualOthers);
+      const notes = req.body?.notes;
+
+      try {
+        const result = await adminUpdateClaim(pool, {
+          requisitionId,
+          adminStaffId: req.session.user.staffId,
+          mileage,
+          accommodation,
+          travelFare,
+          others,
+          notes,
+          file: req.file ?? null,
+        });
+
+        if (result.error) {
+          if (req.file) {
+            try {
+              fs.unlinkSync(req.file.path);
+            } catch {
+              /* ignore */
+            }
+          }
+          return res.status(result.status).json({ error: result.error });
+        }
+
+        return res.json({ requisitionId: result.requisitionId, message: "Actual claim recorded successfully." });
+      } catch (err) {
+        console.error("Admin update claim error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
+
+  apiRouter.get(
+    "/requisitions/:requisitionId/admin-claim/attachment",
+    generalLimiter,
+    requireAdmin,
+    async (req, res) => {
+      const requisitionId = parsePositiveInt(req.params.requisitionId);
+      if (!requisitionId) {
+        return res.status(400).json({ error: "Invalid requisition ID." });
+      }
+
+      try {
+        const absolutePath = await fetchAdminClaimAttachmentPath(pool, requisitionId);
+        if (!absolutePath || !fs.existsSync(absolutePath)) {
+          return res.status(404).json({ error: "Claim attachment not found." });
+        }
+
+        res.setHeader("Content-Type", mimeTypeForDocument(absolutePath));
+        res.setHeader("Content-Disposition", `inline; filename="${documentNameFromPath(absolutePath)}"`);
+        return res.sendFile(absolutePath);
+      } catch (err) {
+        console.error("Admin claim attachment download error:", err);
+        const mapped = mapRequisitionDbError(err);
+        return res.status(mapped.status).json({ error: mapped.error });
+      }
+    },
+  );
 
   apiRouter.get("/requisitions/approval/queue", generalLimiter, requireApproval, async (req, res) => {
     try {

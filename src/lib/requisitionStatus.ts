@@ -318,7 +318,7 @@ export function preTrainingSteps(status: string): PreTrainingStep[] {
     { key: "submitted", label: "Submitted" },
     { key: "hod", label: "HOD recommend" },
     { key: "hr", label: "HR verify" },
-    { key: "dean", label: "Approval" },
+    { key: "approval", label: "Approval" },
   ] as const;
 
   if (status === "save_draft") {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink } from "react-router-dom";
-import { BarChart3, ClipboardCheck, History, LayoutDashboard, LogOut, Menu, Settings, Users } from "lucide-react";
+import { Banknote, BarChart3, ClipboardCheck, History, LayoutDashboard, LogOut, Menu, Settings, Users } from "lucide-react";
 
 import { SidebarPendingCount } from "@/components/cpd/SidebarPendingCount";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const menuItems = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/verify-requisition", label: "Verification", icon: ClipboardCheck, badgeKey: "verification" },
+  { to: "/admin/claim", label: "Claim", icon: Banknote },
   { to: "/admin/report", label: "Report", icon: BarChart3 },
   { to: "/admin/history", label: "History", icon: History },
   { to: "/admin/settings", label: "Settings", icon: Settings },

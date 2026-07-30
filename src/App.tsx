@@ -15,6 +15,8 @@ import { TrackRequisition } from "./staff/TrackRequisition.tsx";
 import { StaffCalendarPage } from "./staff/calendar.tsx";
 import { Settings } from "./staff/Settings.tsx";
 import { AdminDashboardPage } from "./admin/Dashboard.tsx";
+import { AdminClaimPage } from "./admin/Claim.tsx";
+import { AdminClaimHistoryPage } from "./admin/ClaimHistory.tsx";
 import { AdminHistoryPage } from "./admin/History.tsx";
 import { AdminTrackRequisitionPage } from "./admin/TrackRequisition.tsx";
 import { AdminReportPage } from "./admin/Report.tsx";
@@ -65,7 +67,10 @@ const App = () => (
             <Route path="/admin/requisitions" element={<AdminRequisitionsPage />} />
             <Route path="/admin/verify-requisition" element={<AdminVerifyRequisitionPage />} />
             <Route path="/admin/report" element={<AdminReportPage />} />
+            <Route path="/admin/claim" element={<AdminClaimPage />} />
+            <Route path="/admin/claim/history" element={<AdminClaimHistoryPage />} />
             <Route path="/admin/history" element={<AdminHistoryPage />} />
+
             <Route path="/admin/requisition/track" element={<AdminTrackRequisitionPage />} />
             <Route path="/admin/settings" element={<AdminSettingsPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />

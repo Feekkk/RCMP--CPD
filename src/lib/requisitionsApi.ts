@@ -295,6 +295,69 @@ export type ApprovalDecision = "approve" | "reject";
 
 export type ApprovalResponse = HodReviewResponse;
 
+export type AdminClaimBudget = {
+  mileage: number;
+  accommodation: number;
+  travelFare: number;
+  others: number;
+  total: number;
+};
+
+export type AdminActualClaim = AdminClaimBudget & {
+  notes: string | null;
+  attachmentFileName: string | null;
+  attachmentUrl: string | null;
+  recordedAt: string;
+  recordedBy: string | null;
+};
+
+export type AdminClaimItem = {
+  requisitionId: number;
+  id: string;
+  title: string;
+  category: string;
+  venue: string;
+  staffName: string;
+  staffEmail: string;
+  departmentName: string | null;
+  programmeDates: string[];
+  submittedAt: string;
+  staffClaim: AdminClaimBudget;
+  actualClaim: AdminActualClaim | null;
+  claimed: boolean;
+};
+
+export type AdminClaimQueueResponse = {
+  requisitions: AdminClaimItem[];
+  summary: {
+    total: number;
+    pending: number;
+    claimed: number;
+  };
+};
+
+export type AdminClaimHistoryResponse = {
+  requisitions: AdminClaimItem[];
+  summary: {
+    total: number;
+    month: string | null;
+  };
+};
+
+export type AdminClaimSubmission = {
+  actualMileage: string;
+  actualAccommodation: string;
+  actualTravelFare: string;
+  actualOthers: string;
+  notes?: string;
+  attachment?: File | null;
+};
+
+export type AdminClaimResponse = {
+  requisitionId: number;
+  message: string;
+};
+
 async function parseApiError(res: Response, fallback: string) {
   const data = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
   return [data.error, data.hint].filter(Boolean).join(" ") || fallback;
@@ -679,6 +742,66 @@ export async function submitAdminVerify(
   }
 
   return res.json() as Promise<AdminVerifyResponse>;
+}
+
+export async function fetchAdminClaimQueue(): Promise<AdminClaimQueueResponse> {
+  const res = await fetch("/api/requisitions/admin/claim-queue", { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load claim queue."));
+  }
+
+  return res.json() as Promise<AdminClaimQueueResponse>;
+}
+
+export async function fetchAdminClaimHistory(month?: string | null): Promise<AdminClaimHistoryResponse> {
+  const params = new URLSearchParams();
+  if (month) params.set("month", month);
+  const query = params.toString();
+  const res = await fetch(`/api/requisitions/admin/claim-history${query ? `?${query}` : ""}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load claim history."));
+  }
+
+  return res.json() as Promise<AdminClaimHistoryResponse>;
+}
+
+export async function fetchAdminClaimDetail(requisitionId: number): Promise<AdminClaimItem> {
+  const res = await fetch(`/api/requisitions/${requisitionId}/admin-claim`, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to load claim details."));
+  }
+
+  return res.json() as Promise<AdminClaimItem>;
+}
+
+export async function submitAdminClaim(
+  requisitionId: number,
+  data: AdminClaimSubmission,
+): Promise<AdminClaimResponse> {
+  const formData = new FormData();
+  formData.append("actualMileage", data.actualMileage);
+  formData.append("actualAccommodation", data.actualAccommodation);
+  formData.append("actualTravelFare", data.actualTravelFare);
+  formData.append("actualOthers", data.actualOthers);
+  if (data.notes) formData.append("notes", data.notes);
+  if (data.attachment) formData.append("attachment", data.attachment);
+
+  const res = await fetch(`/api/requisitions/${requisitionId}/admin-claim`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, "Unable to save the actual claim."));
+  }
+
+  return res.json() as Promise<AdminClaimResponse>;
 }
 
 export async function fetchApprovalQueue(): Promise<ApprovalQueueResponse> {

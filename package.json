@@ -14,7 +14,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cleanup:attachments": "node script/attachment-cleanup.js",
+    "cleanup:attachments:dry": "node script/attachment-cleanup.js --dry-run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

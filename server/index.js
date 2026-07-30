@@ -10,6 +10,7 @@ import { createSessionMiddleware } from "./auth/session.js";
 import { isDevLoginEnabled, registerDevAuthRoutes } from "./auth/dev.js";
 import { isMicrosoftSsoConfigured, registerMicrosoftAuthRoutes } from "./auth/microsoft.js";
 import { registerRequisitionRoutes } from "./requisitions.js";
+import { scheduleAttachmentCleanup } from "../script/attachment-cleanup.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distPath = path.join(__dirname, "..", "dist");
@@ -566,6 +567,7 @@ const server = app.listen(port, host, () => {
       ? "Static UI: enabled (dist/) — for local dev prefer SERVE_STATIC=0 and http://localhost:8080"
       : "Static UI: disabled (API only) — use Vite on :8080",
   );
+  scheduleAttachmentCleanup();
 });
 
 server.on("error", (err) => {

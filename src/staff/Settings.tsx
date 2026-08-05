@@ -81,7 +81,7 @@ export function Settings() {
             <CardHeader>
               <CardTitle>Staff Profile</CardTitle>
               <CardDescription>
-                Read-only fields for your organisation profile. Please contact the IT team if you need to update your profile.
+                Read-only fields for your organisation profile. We do not store and manage any of your personal data.
               </CardDescription>
             </CardHeader>
             <CardContent>

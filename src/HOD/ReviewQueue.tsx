@@ -422,7 +422,12 @@ function ReviewDialog({
                     <ThumbsDown className="h-4 w-4" />
                     Reject
                   </Button>
-                  <Button type="button" disabled={isSubmitting} onClick={() => onRecommend(item)}>
+                  <Button
+                    type="button"
+                    disabled={isSubmitting}
+                    className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+                    onClick={() => onRecommend(item)}
+                  >
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
                     Recommend
                   </Button>

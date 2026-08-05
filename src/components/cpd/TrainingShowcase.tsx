@@ -169,7 +169,7 @@ export function TrainingShowcase() {
                   key={`${training.id}-${loopIndex}`}
                   ref={loopIndex === 0 ? firstCardRef : undefined}
                   className={cn(
-                    "w-[min(28rem,86vw)] shrink-0 transition-opacity duration-500",
+                    "w-[min(20rem,72vw)] shrink-0 transition-opacity duration-500",
                     isActive ? "opacity-100" : "opacity-50",
                   )}
                   aria-hidden={!isActive}
@@ -181,21 +181,21 @@ export function TrainingShowcase() {
                     aria-label={training.title}
                     tabIndex={isActive ? 0 : -1}
                   >
-                    <div className="overflow-hidden rounded-[1.75rem] bg-muted">
+                    <div className="overflow-hidden rounded-2xl bg-muted">
                       <img
                         src={training.image}
                         alt=""
-                        className="aspect-[4/5] h-auto w-full object-cover"
+                        className="aspect-[3/2] h-auto w-full object-cover"
                         loading={loopIndex < COUNT + 2 ? "eager" : "lazy"}
                         decoding="async"
                       />
                     </div>
-                    <div className="mt-5 space-y-2 px-1 sm:mt-6 sm:space-y-3">
+                    <div className="mt-4 space-y-1.5 px-1 sm:mt-5 sm:space-y-2">
                       <p className="text-sm font-semibold text-foreground">{training.category}</p>
-                      <h3 className="font-display text-xl font-bold leading-snug tracking-tight text-foreground sm:text-2xl">
+                      <h3 className="font-display text-lg font-bold leading-snug tracking-tight text-foreground sm:text-xl">
                         {training.title}
                       </h3>
-                      <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{training.detail}</p>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{training.detail}</p>
                     </div>
                   </button>
                 </article>

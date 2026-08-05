@@ -1,14 +1,12 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Award, CalendarCheck, CheckCircle2, ClipboardList, FileText, History, Loader2, User, Users, X } from "lucide-react";
+import { Award, CalendarCheck, CheckCircle2, ClipboardList, FileText, History, Loader2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { HodNeedActionCard } from "@/components/cpd/HodNeedActionCard";
 import { InsightStatCard } from "@/components/cpd/InsightStatCard";
 import { RequisitionPolicyCard } from "@/components/cpd/RequisitionPolicyCard";
-import { RequisitionStatusBadge } from "@/components/cpd/RequisitionStatusBadge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,30 +23,14 @@ import {
   fetchHodDepartmentStaff,
   fetchHodRequisitionHistory,
   fetchHodReviewQueue,
-  type CpdTrackStatus,
   type HodDepartmentStaffMember,
+  type HodProgrammeSlot,
   type RequisitionHistoryItem,
 } from "@/lib/requisitionsApi";
-import { statusDetailLabel } from "@/lib/requisitionStatus";
+import { statusDetailLabel, statusGroupTrafficLight, TRAFFIC_LIGHT_STYLES } from "@/lib/requisitionStatus";
 import { cn } from "@/lib/utils";
 
-const trackStatusMeta: Record<
-  CpdTrackStatus,
-  { label: string; badgeClass: string }
-> = {
-  "on-track": {
-    label: "On-track",
-    badgeClass: "border-green-500/30 bg-green-500/15 text-green-700 dark:text-green-300",
-  },
-  "need-attention": {
-    label: "Need Attention",
-    badgeClass: "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
-  },
-  "off-track": {
-    label: "Off-Track",
-    badgeClass: "border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-300",
-  },
-};
+const CPD_TARGET_HOURS = 40;
 
 async function fetchAllDepartmentHistory(): Promise<RequisitionHistoryItem[]> {
   const firstPage = await fetchHodRequisitionHistory({ phase: "all", page: 1, pageSize: 100 });
@@ -78,54 +60,55 @@ function countApprovedThisMonth(history: RequisitionHistoryItem[]) {
   ).length;
 }
 
-function initialsFromName(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+function roundHours(hours: number) {
+  return Math.round(hours * 100) / 100;
+}
+
+function formatCpdHours(hours: number) {
+  const rounded = roundHours(hours);
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function hoursFromProgrammeSlots(slots: HodProgrammeSlot[]) {
+  let totalMinutes = 0;
+  for (const slot of slots) {
+    if (!slot.from || !slot.to) continue;
+    const fromParts = slot.from.split(":").map(Number);
+    const toParts = slot.to.split(":").map(Number);
+    if (fromParts.length < 2 || toParts.length < 2) continue;
+    const [fromHour, fromMinute] = fromParts;
+    const [toHour, toMinute] = toParts;
+    if ([fromHour, fromMinute, toHour, toMinute].some((value) => Number.isNaN(value))) continue;
+    const minutes = toHour * 60 + toMinute - (fromHour * 60 + fromMinute);
+    if (minutes > 0) totalMinutes += minutes;
+  }
+  return roundHours(totalMinutes / 60);
+}
+
+function pendingHoursFromHistory(history: RequisitionHistoryItem[]) {
+  return roundHours(
+    history.reduce((sum, item) => {
+      if (item.statusGroup === "draft" || item.statusGroup === "rejected") return sum;
+      if (item.postTraining.cpdHoursCounted) return sum;
+      const hours =
+        item.postTraining.cpdHours != null
+          ? Number(item.postTraining.cpdHours)
+          : hoursFromProgrammeSlots(item.programmeSlots ?? []);
+      return sum + (Number.isFinite(hours) ? hours : 0);
+    }, 0),
+  );
 }
 
 function showStaffHistoryToast(member: HodDepartmentStaffMember, history: RequisitionHistoryItem[]) {
   const items = history.filter((item) => item.staffEmail === member.email);
 
-  if (!items.length) {
-    toast.custom(
-      (t) => (
-        <div className="flex w-[min(100vw-2rem,360px)] items-start gap-3 rounded-xl border bg-background p-4 shadow-lg">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <User className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold leading-tight">{member.fullName}</p>
-            <p className="mt-1 text-sm text-muted-foreground">No requisitions submitted yet.</p>
-          </div>
-          <button
-            type="button"
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => toast.dismiss(t)}
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ),
-      { duration: 6000 },
-    );
-    return;
-  }
-
   toast.custom(
     (t) => (
-      <div className="w-[min(100vw-2rem,400px)] overflow-hidden rounded-xl border bg-background shadow-lg">
-        <div className="flex items-start justify-between gap-3 border-b bg-muted/30 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-              {initialsFromName(member.fullName)}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate font-semibold leading-tight">{member.fullName}</p>
-              <p className="text-xs text-muted-foreground">{member.email}</p>
-            </div>
+      <div className="w-[min(100vw-2rem,360px)] rounded-lg border bg-background p-4 shadow-lg">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-medium leading-tight">{member.fullName}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.email}</p>
           </div>
           <button
             type="button"
@@ -137,40 +120,27 @@ function showStaffHistoryToast(member: HodDepartmentStaffMember, history: Requis
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requisition history</p>
-          <Badge variant="secondary" className="tabular-nums">
-            {items.length}
-          </Badge>
-        </div>
-
-        <ul className="max-h-56 space-y-0 overflow-y-auto p-2">
-          {items.map((item) => (
-            <li
-              key={item.requisitionId}
-              className="rounded-lg border border-transparent px-2.5 py-2.5 transition-colors hover:border-border hover:bg-muted/40"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5 shrink-0" />
-                    {item.id}
-                  </p>
-                  <p className="mt-1 truncate text-sm font-medium leading-snug">
-                    {item.title || "Untitled programme"}
-                  </p>
-                </div>
-                <RequisitionStatusBadge
-                  statusGroup={item.statusGroup}
-                  label={statusDetailLabel(item.status)}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
+        {items.length ? (
+          <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+            {items.map((item) => {
+              const light = TRAFFIC_LIGHT_STYLES[statusGroupTrafficLight(item.statusGroup)];
+              return (
+                <li key={item.requisitionId} className="flex items-center justify-between gap-3 text-sm">
+                  <p className="min-w-0 truncate">{item.title || item.id}</p>
+                  <span className={cn("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium", light.text)}>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", light.dot)} aria-hidden />
+                    {statusDetailLabel(item.status)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">No requisitions yet.</p>
+        )}
       </div>
     ),
-    { duration: 15000 },
+    { duration: items.length ? 10000 : 5000 },
   );
 }
 
@@ -227,6 +197,27 @@ export const HODDashboardPage = () => {
   const reviewQueueCount = reviewQueueData?.summary.pending ?? 0;
   const approvedThisMonth = useMemo(() => countApprovedThisMonth(departmentHistory), [departmentHistory]);
   const teamMembers = staffList.length;
+  const isProgressLoading = isStaffLoading || isHistoryLoading;
+
+  const departmentProgress = useMemo(() => {
+    const completedHours = roundHours(
+      staffList.reduce((sum, member) => sum + Number(member.cpdCompletedHours ?? 0), 0),
+    );
+    const pendingHours = pendingHoursFromHistory(departmentHistory);
+    const targetHours = staffList.length
+      ? staffList.reduce((sum, member) => sum + Number(member.cpdTargetHours ?? CPD_TARGET_HOURS), 0)
+      : CPD_TARGET_HOURS;
+    const remainingHours = roundHours(Math.max(0, targetHours - completedHours));
+    const percent = targetHours ? Math.min(100, Math.round((completedHours / targetHours) * 100)) : 0;
+
+    return {
+      completedHours,
+      pendingHours,
+      targetHours,
+      remainingHours,
+      percent,
+    };
+  }, [staffList, departmentHistory]);
 
   const stats = [
     {
@@ -248,10 +239,6 @@ export const HODDashboardPage = () => {
       isLoading: isStaffLoading,
     },
   ] as const;
-
-  const myCpdCompleted = 14;
-  const myCpdTarget = 40;
-  const myCpdPercent = myCpdTarget ? Math.round((myCpdCompleted / myCpdTarget) * 100) : 0;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -340,7 +327,7 @@ export const HODDashboardPage = () => {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead className="hidden md:table-cell">Email</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
+                        <TableHead className="text-right">CPD Hours</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -380,12 +367,13 @@ export const HODDashboardPage = () => {
                             </TableCell>
                             <TableCell className="hidden md:table-cell text-muted-foreground">{member.email}</TableCell>
                             <TableCell className="text-right">
-                              <Badge
-                                variant="outline"
-                                className={cn(trackStatusMeta[member.trackStatus].badgeClass)}
-                              >
-                                {trackStatusMeta[member.trackStatus].label}
-                              </Badge>
+                              <span className="font-medium tabular-nums">
+                                {formatCpdHours(member.cpdCompletedHours)}h
+                              </span>
+                              <span className="text-muted-foreground tabular-nums">
+                                {" "}
+                                / {formatCpdHours(member.cpdTargetHours)}h
+                              </span>
                             </TableCell>
                           </TableRow>
                         ))
@@ -410,32 +398,43 @@ export const HODDashboardPage = () => {
                   <Award className="h-5 w-5 text-primary" />
                   Department Progress
                 </CardTitle>
-                <CardDescription>Training hours towards the annual requirement.</CardDescription>
+                <CardDescription>
+                  Department training hours towards the annual {CPD_TARGET_HOURS}h requirement per staff.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col items-center gap-5">
-                <div className="relative flex items-center justify-center">
-                  <CircularProgress percent={myCpdPercent} />
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <p className="font-display text-3xl font-bold leading-none">{myCpdPercent}%</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {myCpdCompleted}h / {myCpdTarget}h
-                    </p>
+                {isProgressLoading ? (
+                  <div className="flex h-[210px] items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                </div>
-                <div className="grid w-full gap-2 rounded-xl border bg-muted/30 p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Approved</span>
-                    <span className="font-medium">10h</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Pending</span>
-                    <span className="font-medium">4h</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Remaining</span>
-                    <span className="font-medium">{myCpdTarget - myCpdCompleted}h</span>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="relative flex items-center justify-center">
+                      <CircularProgress percent={departmentProgress.percent} />
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <p className="font-display text-3xl font-bold leading-none">{departmentProgress.percent}%</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatCpdHours(departmentProgress.completedHours)}h /{" "}
+                          {formatCpdHours(departmentProgress.targetHours)}h
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid w-full gap-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Approved</span>
+                        <span className="font-medium">{formatCpdHours(departmentProgress.completedHours)}h</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Pending</span>
+                        <span className="font-medium">{formatCpdHours(departmentProgress.pendingHours)}h</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Remaining</span>
+                        <span className="font-medium">{formatCpdHours(departmentProgress.remainingHours)}h</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

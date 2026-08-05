@@ -17,6 +17,10 @@ function formatCpdHours(hours: number) {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
+function formatRm(amount: number) {
+  return `RM ${amount.toFixed(2)}`;
+}
+
 function departmentRiskBadgeClass(risk: "Low" | "Moderate" | "High") {
   if (risk === "Moderate") {
     return "border-yellow-500/30 bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300";
@@ -34,7 +38,6 @@ export function ApprovalReportPage() {
   });
 
   const totalStaff = reportStats?.totalStaff ?? 0;
-  const compliantStaff = reportStats?.compliantStaff ?? 0;
   const approvedClaims = reportStats?.approvedRequisitionsThisMonth ?? 0;
   const submittedClaims = reportStats?.submittedRequisitionsThisMonth ?? 0;
   const totalHours = reportStats?.totalTrainingHours ?? 0;
@@ -42,12 +45,14 @@ export function ApprovalReportPage() {
   const cpdTargetHours = reportStats?.cpdTargetHours ?? 40;
   const academicDivision = reportStats?.divisionHours.academic ?? {
     staffCount: 0,
+    compliantCount: 0,
     totalHours: 0,
     averageHours: 0,
     targetHours: cpdTargetHours,
   };
   const servicesDivision = reportStats?.divisionHours.services ?? {
     staffCount: 0,
+    compliantCount: 0,
     totalHours: 0,
     averageHours: 0,
     targetHours: cpdTargetHours,
@@ -55,20 +60,24 @@ export function ApprovalReportPage() {
   const topDepartments = reportStats?.topDepartments ?? [];
   const monthlyTrend = reportStats?.monthlyTrend ?? [];
 
-  const complianceRate = totalStaff ? Math.round((compliantStaff / totalStaff) * 100) : 0;
+  const academicCompliantStaff = academicDivision.compliantCount;
+  const academicStaffCount = academicDivision.staffCount;
+  const academicComplianceRate = academicStaffCount
+    ? Math.round((academicCompliantStaff / academicStaffCount) * 100)
+    : 0;
   const approvalRate = submittedClaims ? Math.round((approvedClaims / submittedClaims) * 100) : 0;
   const participantRate = totalStaff ? Math.round((participantsThisMonth / totalStaff) * 100) : 0;
-  const maxTrendHours = monthlyTrend.length ? Math.max(...monthlyTrend.map((item) => item.hours), 1) : 1;
+  const maxTrendAmount = monthlyTrend.length ? Math.max(...monthlyTrend.map((item) => item.amount), 1) : 1;
   const strongestMonth = monthlyTrend.reduce(
-    (best, item) => (item.hours > best.hours ? item : best),
-    monthlyTrend[0] ?? { month: "", hours: 0 },
+    (best, item) => (item.amount > best.amount ? item : best),
+    monthlyTrend[0] ?? { month: "", amount: 0 },
   );
   const overallAverage = totalStaff ? Math.round((totalHours / totalStaff) * 10) / 10 : 0;
 
   const snapshot = buildExecutiveSnapshot({
-    totalStaff,
-    compliantStaff,
-    complianceRate,
+    totalStaff: academicStaffCount,
+    compliantStaff: academicCompliantStaff,
+    complianceRate: academicComplianceRate,
     approvalRate,
     submittedClaims,
     totalHours,
@@ -78,8 +87,8 @@ export function ApprovalReportPage() {
   const summaryCards = [
     {
       label: "CPD compliant staff",
-      value: `${compliantStaff}/${totalStaff}`,
-      hint: `${complianceRate}% reached minimum yearly target`,
+      value: `${academicCompliantStaff}/${academicStaffCount}`,
+      hint: `${academicComplianceRate}% of academic staff reached minimum yearly target`,
       icon: ShieldCheck,
     },
     {
@@ -302,8 +311,8 @@ export function ApprovalReportPage() {
 
             <Card className="xl:col-span-2">
               <CardHeader>
-                <CardTitle>Monthly learning trend</CardTitle>
-                <CardDescription>Total CPD Hours recorded over the last 4 months.</CardDescription>
+                <CardTitle>Monthly claim trend</CardTitle>
+                <CardDescription>Total actual claims recorded over the last 4 months.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {isReportLoading ? (
@@ -316,21 +325,21 @@ export function ApprovalReportPage() {
                       <div key={item.monthKey} className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="font-medium">{item.month}</span>
-                          <span className="text-muted-foreground">{formatCpdHours(item.hours)} CPD Hours</span>
+                          <span className="text-muted-foreground">{formatRm(item.amount)}</span>
                         </div>
                         <div className="h-3 rounded-full bg-muted">
                           <div
                             className="h-3 rounded-full bg-primary"
-                            style={{ width: `${Math.round((item.hours / maxTrendHours) * 100)}%` }}
+                            style={{ width: `${Math.round((item.amount / maxTrendAmount) * 100)}%` }}
                           />
                         </div>
                       </div>
                     ))}
-                    {strongestMonth.hours > 0 ? (
+                    {strongestMonth.amount > 0 ? (
                       <div className="rounded-xl border bg-muted/40 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <ArrowUpRight className="h-4 w-4 text-primary" />
-                          {strongestMonth.month} recorded the strongest learning activity in this period.
+                          {strongestMonth.month} recorded the highest claim amount in this period.
                         </div>
                       </div>
                     ) : null}

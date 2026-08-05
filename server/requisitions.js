@@ -101,8 +101,8 @@ function resolveStaffDivisionType(division, departmentName) {
 
 function buildDivisionHoursSummary(rows, targetHours) {
   const totals = {
-    academic: { staffCount: 0, totalHours: 0 },
-    services: { staffCount: 0, totalHours: 0 },
+    academic: { staffCount: 0, totalHours: 0, compliantCount: 0 },
+    services: { staffCount: 0, totalHours: 0, compliantCount: 0 },
   };
 
   for (const row of rows) {
@@ -110,11 +110,13 @@ function buildDivisionHoursSummary(rows, targetHours) {
     const completedHours = Number(row.completed_hours ?? 0);
     totals[divisionType].staffCount += 1;
     totals[divisionType].totalHours += completedHours;
+    if (completedHours >= targetHours) totals[divisionType].compliantCount += 1;
   }
 
   return {
     academic: {
       staffCount: totals.academic.staffCount,
+      compliantCount: totals.academic.compliantCount,
       totalHours: Math.round(totals.academic.totalHours * 100) / 100,
       averageHours:
         totals.academic.staffCount > 0
@@ -124,6 +126,7 @@ function buildDivisionHoursSummary(rows, targetHours) {
     },
     services: {
       staffCount: totals.services.staffCount,
+      compliantCount: totals.services.compliantCount,
       totalHours: Math.round(totals.services.totalHours * 100) / 100,
       averageHours:
         totals.services.staffCount > 0
@@ -165,8 +168,8 @@ function buildTopDepartments(rows, limit = 5) {
 }
 
 function buildMonthlyTrend(rows) {
-  const hoursByMonth = new Map(
-    rows.map((row) => [String(row.month_key), Number(row.hours ?? 0)]),
+  const amountByMonth = new Map(
+    rows.map((row) => [String(row.month_key), Number(row.amount ?? row.hours ?? 0)]),
   );
   const months = [];
 
@@ -180,7 +183,7 @@ function buildMonthlyTrend(rows) {
     months.push({
       month: date.toLocaleDateString("en-MY", { month: "short" }),
       monthKey,
-      hours: hoursByMonth.get(monthKey) ?? 0,
+      amount: Math.round((amountByMonth.get(monthKey) ?? 0) * 100) / 100,
     });
   }
 
@@ -943,7 +946,6 @@ async function queryAdminReportStats(pool) {
 
   const [
     [totalStaffRows],
-    [compliantStaffRows],
     [approvedRows],
     [submittedRows],
     [hoursRows],
@@ -953,19 +955,6 @@ async function queryAdminReportStats(pool) {
     [monthlyTrendRows],
   ] = await Promise.all([
     pool.execute(`SELECT COUNT(*) AS cnt FROM staff`),
-    pool.execute(
-      `SELECT COUNT(*) AS cnt
-       FROM staff s
-       LEFT JOIN (
-         SELECT r2.submitted_by AS staff_id,
-                SUM(COALESCE(pt.cpd_points, 0)) AS completed_hours
-         FROM requisitions r2
-         INNER JOIN post_training pt ON pt.requisition_id = r2.id AND pt.cpd_points_counted = 1
-         GROUP BY r2.submitted_by
-       ) cpd ON cpd.staff_id = s.id
-       WHERE COALESCE(cpd.completed_hours, 0) >= ?`,
-      [CPD_TARGET_HOURS],
-    ),
     pool.execute(
       `SELECT COUNT(DISTINCT al.requisition_id) AS cnt
        FROM requisition_audit_log al
@@ -1032,23 +1021,28 @@ async function queryAdminReportStats(pool) {
       [CPD_TARGET_HOURS],
     ),
     pool.execute(
-      `SELECT DATE_FORMAT(pt.updated_at, '%Y-%m') AS month_key,
-              COALESCE(SUM(pt.cpd_points), 0) AS hours
+      `SELECT DATE_FORMAT(pt.claim_recorded_at, '%Y-%m') AS month_key,
+              COALESCE(SUM(
+                COALESCE(pt.actual_mileage, 0)
+                + COALESCE(pt.actual_accommodation, 0)
+                + COALESCE(pt.actual_travel_fare, 0)
+                + COALESCE(pt.actual_others, 0)
+              ), 0) AS amount
        FROM post_training pt
-       WHERE pt.cpd_points_counted = 1
-         AND pt.updated_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 3 MONTH)
+       WHERE pt.claim_recorded_at IS NOT NULL
+         AND pt.claim_recorded_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 3 MONTH)
        GROUP BY month_key
        ORDER BY month_key`,
     ),
   ]);
 
   const totalStaff = Number(totalStaffRows[0]?.cnt ?? 0);
-  const compliantStaff = Number(compliantStaffRows[0]?.cnt ?? 0);
   const approvedRequisitionsThisMonth = Number(approvedRows[0]?.cnt ?? 0);
   const submittedRequisitionsThisMonth = Number(submittedRows[0]?.cnt ?? 0);
   const totalTrainingHours = Math.round(Number(hoursRows[0]?.total_hours ?? 0) * 100) / 100;
   const participantsThisMonth = Number(participantsRows[0]?.cnt ?? 0);
   const divisionHours = buildDivisionHoursSummary(divisionStaffRows, CPD_TARGET_HOURS);
+  const compliantStaff = divisionHours.academic.compliantCount;
   const departments = buildTopDepartments(departmentRows, null);
   const topDepartments = departments.filter((department) => department.staffCount > 0).slice(0, 5);
   const monthlyTrend = buildMonthlyTrend(monthlyTrendRows);
@@ -1056,6 +1050,7 @@ async function queryAdminReportStats(pool) {
   return {
     totalStaff,
     compliantStaff,
+    academicStaff: divisionHours.academic.staffCount,
     cpdTargetHours: CPD_TARGET_HOURS,
     approvedRequisitionsThisMonth,
     submittedRequisitionsThisMonth,
@@ -2365,13 +2360,13 @@ function mapRequisitionDbError(err) {
   if (code === "ER_BAD_FIELD_ERROR" && message.includes("time_")) {
     return {
       status: 503,
-      error: "Database requisition_date table is outdated. Run db/migrations/add_requisition_times.sql.",
+      error: "Database requisition_date table is outdated. Re-import db/schema.sql into the cpd database.",
     };
   }
   if (code === "ER_BAD_FIELD_ERROR" && (message.includes("actual_") || message.includes("claim_"))) {
     return {
       status: 503,
-      error: "Database post_training table is outdated. Run db/migrations/add_post_training_claims.sql.",
+      error: "Database post_training table is outdated. Re-import db/schema.sql into the cpd database.",
     };
   }
   if (code === "ER_NO_SUCH_TABLE") {

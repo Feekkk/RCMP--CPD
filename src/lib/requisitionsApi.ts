@@ -675,6 +675,7 @@ export async function fetchAdminRecentSubmissions(pageSize = 5): Promise<AdminRe
 
 export type AdminReportDivisionHours = {
   staffCount: number;
+  compliantCount: number;
   totalHours: number;
   averageHours: number;
   targetHours: number;
@@ -692,7 +693,7 @@ export type AdminReportDepartmentPerformance = {
 export type AdminReportMonthlyTrend = {
   month: string;
   monthKey: string;
-  hours: number;
+  amount: number;
 };
 
 export type AdminReportStats = {

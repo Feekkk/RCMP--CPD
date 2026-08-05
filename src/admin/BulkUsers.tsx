@@ -38,6 +38,7 @@ type ParsedRow = {
   line: number;
   empno: string;
   email: string;
+  jg: string;
   division: string;
   departmentInput: string;
   departmentId: number | null;
@@ -87,6 +88,7 @@ async function importBulkUsers(
   users: Array<{
     empno: string;
     email: string;
+    jg: string;
     departmentId: number | null;
     division: string;
     roleId: number;
@@ -144,6 +146,14 @@ function parseCsvLine(line: string) {
   return line.split(",").map((part) => part.trim());
 }
 
+function findColumnIndex(headers: string[], names: string[]) {
+  for (const name of names) {
+    const idx = headers.indexOf(name);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
 function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): ParsedRow[] {
   const lines = text
     .split(/\r?\n/)
@@ -153,10 +163,11 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase());
-  const empnoIdx = headers.indexOf("empno");
-  const emailIdx = headers.indexOf("email");
-  const departmentIdx = headers.indexOf("department");
-  const divisionIdx = headers.indexOf("division");
+  const empnoIdx = findColumnIndex(headers, ["empno", "employee_no", "employee number"]);
+  const emailIdx = findColumnIndex(headers, ["email"]);
+  const jgIdx = findColumnIndex(headers, ["jg", "job_grade", "job grade"]);
+  const departmentIdx = findColumnIndex(headers, ["department", "department_name"]);
+  const divisionIdx = findColumnIndex(headers, ["division"]);
 
   if (empnoIdx === -1 || emailIdx === -1) return [];
 
@@ -166,6 +177,7 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
     const columns = parseCsvLine(line);
     const empno = columns[empnoIdx] ?? "";
     const email = (columns[emailIdx] ?? "").trim().toLowerCase();
+    const jg = jgIdx === -1 ? "" : (columns[jgIdx] ?? "");
     const division = divisionIdx === -1 ? "" : (columns[divisionIdx] ?? "");
     const departmentInput = departmentIdx === -1 ? "" : (columns[departmentIdx] ?? "");
     const department = resolveDepartment(departmentInput, lookup);
@@ -187,6 +199,7 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
       line: index + 2,
       empno,
       email,
+      jg,
       division,
       departmentInput,
       departmentId: department.departmentId,
@@ -203,9 +216,9 @@ function parseCsvPreview(text: string, lookup: Map<string, DepartmentOption>): P
 function downloadTemplate(departments: DepartmentOption[]) {
   const sampleDept = departments[0]?.departmentName ?? "ACADEMIC SERVICES (FOM)";
   const sampleDept2 = departments[1]?.departmentName ?? sampleDept;
-  const csv = `empno,email,department,division
-EMP001,staff1@unikl.edu.my,${sampleDept},Academic
-EMP002,staff2@unikl.edu.my,${sampleDept2},Services
+  const csv = `empno,email,jg,department,division
+EMP001,staff1@unikl.edu.my,JG41,${sampleDept},Academic
+EMP002,staff2@unikl.edu.my,JG42,${sampleDept2},Services
 `;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -370,6 +383,7 @@ export function AdminBulkUsersPage() {
       .map((row) => ({
         empno: row.empno,
         email: row.email,
+        jg: row.jg,
         departmentId: row.departmentId,
         division: row.division,
         roleId: row.roleId,
@@ -456,8 +470,9 @@ export function AdminBulkUsersPage() {
             <CardHeader>
               <CardTitle>Upload CSV</CardTitle>
               <CardDescription>
-                Upload a file with empno, email, optional department, and optional division. All imported users default
-                to Staff (role_id {DEFAULT_ROLE_ID}). Unknown departments still import for later assignment.
+                Upload a file with empno, email, optional job grade (jg), optional department, and optional division.
+                All imported users default to Staff (role_id {DEFAULT_ROLE_ID}). Unknown departments still import for
+                later assignment.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -528,14 +543,17 @@ export function AdminBulkUsersPage() {
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <p className="text-sm font-medium">Required columns</p>
                   <div className="mt-3 rounded-lg border bg-background p-3 font-mono text-[11px] leading-5 text-muted-foreground">
-                    empno,email,department,division
+                    empno,email,jg,department,division
                   </div>
                   <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
                     <li>
-                      <span className="font-medium text-foreground">empno</span> — employee number
+                      <span className="font-medium text-foreground">empno</span> — employee number (required)
                     </li>
                     <li>
-                      <span className="font-medium text-foreground">email</span> — Microsoft SSO email
+                      <span className="font-medium text-foreground">email</span> — Microsoft SSO email (required)
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">jg</span> — job grade, e.g. JG41 (optional)
                     </li>
                     <li>
                       <span className="font-medium text-foreground">department</span> — exact name, or leave blank /
@@ -554,8 +572,9 @@ export function AdminBulkUsersPage() {
             <UsersIcon className="h-4 w-4" />
             <AlertTitle>Imports to database</AlertTitle>
             <AlertDescription>
-              Valid rows are inserted into the staff table. Existing emails are skipped. Unknown or missing departments
-              still import and appear under Incomplete details so admins can assign them later.
+              Valid rows are inserted into the staff table (empno, email, jg, department_id, division, role_id).
+              Existing emails are skipped. Unknown or missing departments still import and appear under Incomplete
+              details so admins can assign them later.
             </AlertDescription>
           </Alert>
 
@@ -594,6 +613,7 @@ export function AdminBulkUsersPage() {
                           <TableHead className="w-14">#</TableHead>
                           <TableHead className="min-w-[160px]">Empno</TableHead>
                           <TableHead className="min-w-[200px]">Email</TableHead>
+                          <TableHead className="min-w-[100px]">Job grade</TableHead>
                           <TableHead className="min-w-[120px]">Division</TableHead>
                           <TableHead className="min-w-[180px]">Department</TableHead>
                           <TableHead className="min-w-[140px]">Status</TableHead>
@@ -608,6 +628,9 @@ export function AdminBulkUsersPage() {
                             </TableCell>
                             <TableCell className="max-w-[260px] truncate" title={row.email}>
                               {row.email || "—"}
+                            </TableCell>
+                            <TableCell className="max-w-[120px] truncate text-muted-foreground" title={row.jg}>
+                              {row.jg || "—"}
                             </TableCell>
                             <TableCell className="max-w-[160px] truncate text-muted-foreground" title={row.division}>
                               {row.division || "—"}

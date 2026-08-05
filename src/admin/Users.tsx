@@ -56,14 +56,16 @@ type RoleOption = { roleId: number; roleName: string };
 
 type StaffMember = {
   staffId: number;
-  fullName: string;
   email: string;
   empno?: string | null;
+  jg?: string | null;
   division?: string | null;
+  entraId?: string | null;
   departmentId: number | null;
   roleId: number;
   roleName: string;
   isIncomplete?: boolean;
+  fullName?: string;
 };
 
 type DepartmentGroup = {
@@ -251,6 +253,47 @@ function initialsFromName(name: string) {
   return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
 }
 
+function displayName(member: StaffMember) {
+  return member.fullName ?? member.email.split("@")[0]?.replace(/[._-]/g, " ") ?? member.email;
+}
+
+function StaffTextField({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  disabled?: boolean;
+  onSave: (next: string) => void;
+}) {
+  const [draft, setDraft] = React.useState(value);
+
+  React.useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="grid gap-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        className="h-9"
+        value={draft}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const trimmed = draft.trim();
+          if (trimmed !== (value ?? "").trim()) onSave(trimmed);
+        }}
+      />
+    </div>
+  );
+}
+
 function StaffMemberList({
   rows,
   showDepartment,
@@ -264,7 +307,16 @@ function StaffMemberList({
   showDepartment?: boolean;
   departmentOptions: DepartmentOption[];
   roles: RoleOption[];
-  onUpdateStaff: (staffId: number, patch: { roleId?: number; departmentId?: number }) => void;
+  onUpdateStaff: (
+    staffId: number,
+    patch: {
+      roleId?: number;
+      departmentId?: number;
+      empno?: string | null;
+      jg?: string | null;
+      division?: string | null;
+    },
+  ) => void;
   updatingStaffId: number | null;
   emptyMessage?: string;
 }) {
@@ -300,12 +352,12 @@ function StaffMemberList({
             <div className="flex items-start gap-3">
               <Avatar className="h-11 w-11 border border-border">
                 <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
-                  {initialsFromName(member.fullName)}
+                  {initialsFromName(displayName(member))}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium leading-tight">{member.fullName}</p>
+                  <p className="truncate font-medium leading-tight">{displayName(member)}</p>
                   {needsDepartment ? (
                     <Badge
                       variant="outline"
@@ -314,14 +366,57 @@ function StaffMemberList({
                       Needs department
                     </Badge>
                   ) : null}
+                  {member.entraId ? (
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      SSO linked
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                      SSO pending
+                    </Badge>
+                  )}
                   {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-muted-foreground">{member.email}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Staff ID {member.staffId}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  ID {member.staffId}
+                  {member.empno ? ` · ${member.empno}` : ""}
+                  {member.jg ? ` · ${member.jg}` : ""}
+                </p>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <StaffTextField
+                label="Employee no."
+                value={member.empno ?? ""}
+                placeholder="e.g. 12345"
+                disabled={isUpdating}
+                onSave={(next) => {
+                  const current = (member.empno ?? "").trim();
+                  if (next !== current) onUpdateStaff(member.staffId, { empno: next || null });
+                }}
+              />
+              <StaffTextField
+                label="Job grade"
+                value={member.jg ?? ""}
+                placeholder="e.g. JG41"
+                disabled={isUpdating}
+                onSave={(next) => {
+                  const current = (member.jg ?? "").trim();
+                  if (next !== current) onUpdateStaff(member.staffId, { jg: next || null });
+                }}
+              />
+              <StaffTextField
+                label="Division"
+                value={member.division ?? ""}
+                placeholder="e.g. Academic"
+                disabled={isUpdating}
+                onSave={(next) => {
+                  const current = (member.division ?? "").trim();
+                  if (next !== current) onUpdateStaff(member.staffId, { division: next || null });
+                }}
+              />
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Department</Label>
                 <DepartmentSelect
@@ -405,12 +500,18 @@ function DepartmentListButton({
 
 type AddUserFormState = {
   email: string;
+  empno: string;
+  jg: string;
+  division: string;
   departmentId: string;
   roleId: string;
 };
 
 const emptyAddForm = (defaultDeptId?: number): AddUserFormState => ({
   email: "",
+  empno: "",
+  jg: "",
+  division: "",
   departmentId: defaultDeptId != null ? String(defaultDeptId) : "",
   roleId: "1",
 });
@@ -441,6 +542,9 @@ function AddUserDialog({
     mutationFn: async (payload: AddUserFormState) => {
       const body = {
         email: payload.email.trim(),
+        empno: payload.empno.trim() || null,
+        jg: payload.jg.trim() || null,
+        division: payload.division.trim() || null,
         departmentId: Number(payload.departmentId),
         roleId: Number(payload.roleId),
       };
@@ -494,6 +598,35 @@ function AddUserDialog({
               placeholder="name@unikl.edu.my"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="add-empno">Employee no.</Label>
+              <Input
+                id="add-empno"
+                placeholder="12345"
+                value={form.empno}
+                onChange={(e) => setForm((f) => ({ ...f, empno: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="add-jg">Job grade</Label>
+              <Input
+                id="add-jg"
+                placeholder="JG41"
+                value={form.jg}
+                onChange={(e) => setForm((f) => ({ ...f, jg: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="add-division">Division</Label>
+            <Input
+              id="add-division"
+              placeholder="Academic"
+              value={form.division}
+              onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
             />
           </div>
           <div className="grid gap-2">
@@ -580,22 +713,28 @@ export function AdminUsersPage() {
       staffId,
       roleId,
       departmentId,
+      empno,
+      jg,
+      division,
     }: {
       staffId: number;
       roleId?: number;
       departmentId?: number;
+      empno?: string | null;
+      jg?: string | null;
+      division?: string | null;
     }) => {
       const res = await apiFetch(`/api/staff/${staffId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roleId, departmentId }),
+        body: JSON.stringify({ roleId, departmentId, empno, jg, division }),
       });
-      return res.json() as Promise<{ fullName: string; message?: string }>;
+      return res.json() as Promise<{ fullName?: string; email: string; message?: string }>;
     },
     onMutate: ({ staffId }) => setUpdatingStaffId(staffId),
     onSuccess: (result) => {
       toast.success(result.message ?? "Updated", {
-        description: result.fullName,
+        description: result.fullName ?? result.email,
       });
       queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
     },
@@ -603,7 +742,16 @@ export function AdminUsersPage() {
     onSettled: () => setUpdatingStaffId(null),
   });
 
-  const handleUpdateStaff = (staffId: number, patch: { roleId?: number; departmentId?: number }) => {
+  const handleUpdateStaff = (
+    staffId: number,
+    patch: {
+      roleId?: number;
+      departmentId?: number;
+      empno?: string | null;
+      jg?: string | null;
+      division?: string | null;
+    },
+  ) => {
     updateStaffMutation.mutate({ staffId, ...patch });
   };
 
@@ -618,8 +766,11 @@ export function AdminUsersPage() {
       if (dept.departmentName.toLowerCase().includes(searchLower)) return true;
       return dept.staff.some(
         (s) =>
-          s.fullName.toLowerCase().includes(searchLower) ||
+          displayName(s).toLowerCase().includes(searchLower) ||
           s.email.toLowerCase().includes(searchLower) ||
+          (s.empno ?? "").toLowerCase().includes(searchLower) ||
+          (s.jg ?? "").toLowerCase().includes(searchLower) ||
+          (s.division ?? "").toLowerCase().includes(searchLower) ||
           String(s.staffId).includes(searchLower),
       );
     });
@@ -633,8 +784,11 @@ export function AdminUsersPage() {
       for (const member of dept.staff) {
         const matchesDept = dept.departmentName.toLowerCase().includes(searchLower);
         const matchesMember =
-          member.fullName.toLowerCase().includes(searchLower) ||
+          displayName(member).toLowerCase().includes(searchLower) ||
           member.email.toLowerCase().includes(searchLower) ||
+          (member.empno ?? "").toLowerCase().includes(searchLower) ||
+          (member.jg ?? "").toLowerCase().includes(searchLower) ||
+          (member.division ?? "").toLowerCase().includes(searchLower) ||
           String(member.staffId).includes(searchLower);
         if (matchesDept || matchesMember) {
           rows.push({
@@ -644,7 +798,7 @@ export function AdminUsersPage() {
         }
       }
     }
-    return rows.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return rows.sort((a, b) => displayName(a).localeCompare(displayName(b)));
   }, [filteredDepartments, isSearchActive, searchLower]);
 
   const selectedDepartment = React.useMemo(
@@ -680,7 +834,7 @@ export function AdminUsersPage() {
         ...member,
         departmentName: "Unassigned",
       }))
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+      .sort((a, b) => displayName(a).localeCompare(displayName(b)));
   }, [incompleteStaff]);
 
   const selectDepartment = (id: number) => {
@@ -844,7 +998,7 @@ export function AdminUsersPage() {
                         <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
-                            placeholder="Search by department, name, email, or staff ID…"
+                            placeholder="Search by email, empno, job grade, division, or ID…"
                             className="pl-9"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}

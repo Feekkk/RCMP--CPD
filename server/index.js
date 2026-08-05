@@ -198,7 +198,7 @@ async function handleUsersByDepartment(_req, res) {
     );
 
     const [staffRows] = await pool.execute(
-      `SELECT s.id, s.entra_id, s.empno, s.email, s.department_id, s.division, s.role_id, r.role_name
+      `SELECT s.id, s.entra_id, s.empno, s.JG, s.email, s.department_id, s.division, s.role_id, r.role_name
        FROM staff s
        INNER JOIN role_table r ON r.role_id = s.role_id
        ORDER BY s.email`,
@@ -208,6 +208,7 @@ async function handleUsersByDepartment(_req, res) {
     const incompleteStaff = [];
     for (const row of staffRows) {
       const empno = row.empno == null ? "" : String(row.empno).trim();
+      const jg = row.JG == null ? "" : String(row.JG).trim();
       const division = row.division == null ? "" : String(row.division).trim();
       const isIncomplete = row.department_id == null;
       const member = {
@@ -215,6 +216,7 @@ async function handleUsersByDepartment(_req, res) {
         fullName: displayNameFromEmail(row.email),
         email: row.email,
         empno: empno || null,
+        jg: jg || null,
         division: division || null,
         entraId: row.entra_id,
         departmentId: row.department_id,
@@ -277,6 +279,7 @@ async function handleUsersByDepartment(_req, res) {
 apiRouter.post("/staff", generalLimiter, async (req, res) => {
   const email = String(req.body?.email ?? "").trim().toLowerCase();
   const empno = String(req.body?.empno ?? "").trim() || null;
+  const jg = String(req.body?.jg ?? "").trim() || null;
   const division = String(req.body?.division ?? "").trim() || null;
   const departmentId = parsePositiveInt(req.body?.departmentId);
   const roleId = parsePositiveInt(req.body?.roleId);
@@ -290,8 +293,8 @@ apiRouter.post("/staff", generalLimiter, async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      `INSERT INTO staff (empno, email, department_id, division, role_id) VALUES (?, ?, ?, ?, ?)`,
-      [empno, email, departmentId, division, roleId],
+      `INSERT INTO staff (empno, JG, email, department_id, division, role_id) VALUES (?, ?, ?, ?, ?, ?)`,
+      [empno, jg, email, departmentId, division, roleId],
     );
 
     return res.status(201).json({
@@ -334,6 +337,7 @@ apiRouter.post("/staff/bulk", generalLimiter, async (req, res) => {
         .trim()
         .toLowerCase();
       const empno = String(row.empno ?? "").trim();
+      const jg = String(row.jg ?? "").trim() || null;
       const division = String(row.division ?? "").trim() || null;
       const rawDepartmentId = row.departmentId;
       const departmentId =
@@ -370,8 +374,8 @@ apiRouter.post("/staff/bulk", generalLimiter, async (req, res) => {
 
       try {
         const [result] = await pool.execute(
-          `INSERT INTO staff (empno, email, department_id, division, role_id) VALUES (?, ?, ?, ?, ?)`,
-          [empno, email, insertDepartmentId, division, roleId],
+          `INSERT INTO staff (empno, JG, email, department_id, division, role_id) VALUES (?, ?, ?, ?, ?, ?)`,
+          [empno, jg, email, insertDepartmentId, division, roleId],
         );
         created += 1;
         if (needsDepartment) pendingDepartment += 1;
@@ -434,6 +438,11 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
   const roleId = req.body?.roleId !== undefined ? parsePositiveInt(req.body.roleId) : undefined;
   const departmentId =
     req.body?.departmentId !== undefined ? parsePositiveInt(req.body.departmentId) : undefined;
+  const empno =
+    req.body?.empno !== undefined ? String(req.body.empno).trim() || null : undefined;
+  const jg = req.body?.jg !== undefined ? String(req.body.jg).trim() || null : undefined;
+  const division =
+    req.body?.division !== undefined ? String(req.body.division).trim() || null : undefined;
 
   if (roleId === null && req.body?.roleId !== undefined) {
     return res.status(400).json({ error: "Invalid role." });
@@ -441,8 +450,14 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
   if (departmentId === null && req.body?.departmentId !== undefined) {
     return res.status(400).json({ error: "Invalid department." });
   }
-  if (roleId === undefined && departmentId === undefined) {
-    return res.status(400).json({ error: "Provide roleId and/or departmentId to update." });
+  if (
+    roleId === undefined &&
+    departmentId === undefined &&
+    empno === undefined &&
+    jg === undefined &&
+    division === undefined
+  ) {
+    return res.status(400).json({ error: "Provide at least one field to update." });
   }
 
   const sets = [];
@@ -454,6 +469,18 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
   if (departmentId !== undefined) {
     sets.push("department_id = ?");
     params.push(departmentId);
+  }
+  if (empno !== undefined) {
+    sets.push("empno = ?");
+    params.push(empno);
+  }
+  if (jg !== undefined) {
+    sets.push("JG = ?");
+    params.push(jg);
+  }
+  if (division !== undefined) {
+    sets.push("division = ?");
+    params.push(division);
   }
   params.push(staffId);
 
@@ -468,7 +495,7 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
     }
 
     const [rows] = await pool.execute(
-      `SELECT s.id, s.entra_id, s.email, s.department_id,
+      `SELECT s.id, s.entra_id, s.empno, s.JG, s.email, s.department_id, s.division,
               d.department_name, s.role_id, r.role_name
        FROM staff s
        INNER JOIN role_table r ON r.role_id = s.role_id
@@ -483,6 +510,9 @@ apiRouter.patch("/staff/:staffId", generalLimiter, async (req, res) => {
       staffId: row.id,
       fullName: displayNameFromEmail(row.email),
       email: row.email,
+      empno: row.empno,
+      jg: row.JG,
+      division: row.division,
       entraId: row.entra_id,
       departmentId: row.department_id,
       departmentName: row.department_name,
